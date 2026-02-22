@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  EXECUTOR
+  EMPLOYER
+}
+
+enum City {
+  DERBENT
+}
+
+enum PriceType {
+  PER_SQM
+  PER_HOUR
+  FIXED
+  NEGOTIABLE
+}
+
+enum Currency {
+  RUB
+}
+
+enum ListingStatus {
+  ACTIVE
+  PAUSED
+}
+
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String?         @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole        @default(EMPLOYER)
+  createdAt     DateTime        @default(now())
+
+  accounts      Account[]
+  sessions      Session[]
+  profile       Profile?
+  listings      Listing[]
+
+  @@index([role])
+}
+
+model Profile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  city            City     @default(DERBENT)
+  about           String   @default("")
+  experienceYears Int      @default(0)
+  skills          String[]
+  availability    String   @default("По договоренности")
+  isOnline        Boolean  @default(false)
+  urgentToday     Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Listing {
+  id          String        @id @default(cuid())
+  userId      String
+  title       String
+  category    String
+  description String
+  priceType   PriceType
+  priceValue  Decimal?
+  currency    Currency      @default(RUB)
+  status      ListingStatus @default(ACTIVE)
+  city        City          @default(DERBENT)
+  district    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promotions  ListingPromotion[]
+  messages    Message[]
+
+  @@index([category])
+  @@index([status])
+  @@index([updatedAt])
+}
+
+model PaymentPlan {
+  id           String   @id @default(cuid())
+  name         String
+  durationDays Int
+  priceRub     Int
+  isActive     Boolean  @default(true)
+
+  promotions   ListingPromotion[]
+}
+
+model ListingPromotion {
+  id           String   @id @default(cuid())
+  listingId    String
+  paymentPlanId String
+  startsAt     DateTime @default(now())
+  endsAt       DateTime
+  createdAt    DateTime @default(now())
+
+  listing      Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  paymentPlan  PaymentPlan @relation(fields: [paymentPlanId], references: [id])
+
+  @@index([listingId])
+}
+
+model Message {
+  id            String   @id @default(cuid())
+  listingId     String
+  senderName    String
+  senderContact String
+  text          String
+  createdAt     DateTime @default(now())
+
+  listing        Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionToken])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+

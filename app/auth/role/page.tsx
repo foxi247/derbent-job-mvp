@@ -1,0 +1,21 @@
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import { RoleSelector } from "@/components/forms/role-selector";
+
+export default async function RolePage() {
+  const session = await auth();
+
+  if (!session?.user) {
+    redirect("/auth/signin");
+  }
+
+  return (
+    <div className="mx-auto max-w-md surface space-y-4 p-6">
+      <h1 className="text-xl font-semibold">Выберите роль</h1>
+      <p className="text-sm text-muted-foreground">
+        Это делается один раз: исполнитель размещает услуги, работодатель ищет и пишет исполнителям.
+      </p>
+      <RoleSelector currentRole={session.user.role} />
+    </div>
+  );
+}
