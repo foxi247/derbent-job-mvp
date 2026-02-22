@@ -1,64 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getListings } from "@/lib/listings";
-import { createListingPromotion } from "@/lib/promotion";
-import { listingQuerySchema, listingSchema } from "@/lib/validations";
+import { getJobPosts } from "@/lib/jobs";
+import { createJobPostPromotion } from "@/lib/promotion";
+import { jobPostSchema, jobQuerySchema } from "@/lib/validations";
 
 export async function GET(req: NextRequest) {
   const params = Object.fromEntries(req.nextUrl.searchParams.entries());
-  const parsed = listingQuerySchema.safeParse(params);
+  const parsed = jobQuerySchema.safeParse(params);
 
   if (!parsed.success) {
     return NextResponse.json({ error: "Некорректные параметры" }, { status: 400 });
   }
 
-  const data = parsed.data;
-  const listings = await getListings({
-    query: data.query,
-    category: data.category,
-    online: data.online === "true" ? true : data.online === "false" ? false : undefined,
-    urgent: data.urgent === "true" ? true : data.urgent === "false" ? false : undefined,
-    experienceMin: data.experienceMin,
-    experienceMax: data.experienceMax,
-    priceType: data.priceType
+  const jobs = await getJobPosts({
+    query: parsed.data.query,
+    category: parsed.data.category,
+    payType: parsed.data.payType,
+    urgent: parsed.data.urgent === "true" ? true : parsed.data.urgent === "false" ? false : undefined
   });
 
-  return NextResponse.json(listings);
+  return NextResponse.json(jobs);
 }
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-
-  if (!session?.user || session.user.role !== "EXECUTOR") {
+  if (!session?.user || session.user.role !== "EMPLOYER") {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
 
   const body = await req.json();
-  const parsed = listingSchema.safeParse(body);
+  const parsed = jobPostSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const listing = await prisma.listing.create({
+  const jobPost = await prisma.jobPost.create({
     data: {
       userId: session.user.id,
       title: parsed.data.title,
       category: parsed.data.category,
       description: parsed.data.description,
-      priceType: parsed.data.priceType,
-      priceValue: parsed.data.priceValue,
+      payType: parsed.data.payType,
+      payValue: parsed.data.payValue,
       district: parsed.data.district,
+      phone: parsed.data.phone,
+      urgentToday: parsed.data.urgentToday ?? false,
       status: parsed.data.status,
       city: "DERBENT"
     }
   });
 
   if (parsed.data.status === "ACTIVE") {
-    const promoted = await createListingPromotion(listing.id);
+    const promoted = await createJobPostPromotion(jobPost.id);
     return NextResponse.json(promoted, { status: 201 });
   }
 
-  return NextResponse.json(listing, { status: 201 });
+  return NextResponse.json(jobPost, { status: 201 });
 }

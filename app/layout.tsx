@@ -17,6 +17,7 @@ export const metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  const cabinetHref = session?.user?.role === "EMPLOYER" ? "/dashboard-employer" : "/dashboard";
 
   return (
     <html lang="ru">
@@ -34,10 +35,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
             <nav className="flex items-center gap-1.5 sm:gap-2">
               <Link href="/" className="rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground">
-                Главная
+                Исполнители
               </Link>
-              {session?.user?.role === "EXECUTOR" && (
-                <Link href="/dashboard" className="rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground">
+              <Link href="/jobs" className="rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground">
+                Задания
+              </Link>
+              {session?.user && (
+                <Link href={cabinetHref} className="rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground">
                   Кабинет
                 </Link>
               )}

@@ -32,7 +32,7 @@ export function ListingForm({ listing, compact = false, initialExperienceYears =
   const [category, setCategory] = useState(listing?.category ?? "");
   const [description, setDescription] = useState(listing?.description ?? "");
   const [priceType, setPriceType] = useState<PriceType>(listing?.priceType ?? "NEGOTIABLE");
-  const [priceValue, setPriceValue] = useState(listing?.priceValue ? String(listing.priceValue) : "");
+  const [priceValue, setPriceValue] = useState(listing?.priceValue != null ? String(listing.priceValue) : "");
   const [district, setDistrict] = useState(listing?.district ?? "");
   const [status, setStatus] = useState<ListingStatus>(listing?.status ?? "ACTIVE");
   const [experienceYears, setExperienceYears] = useState(String(initialExperienceYears));

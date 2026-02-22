@@ -84,6 +84,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               experienceYears: 2,
               skills: ["Коммуникация", "Ответственность"],
               availability: "Ежедневно, по договоренности",
+              phone: "+7 900 000-00-00",
               isOnline: true,
               urgentToday: false
             }

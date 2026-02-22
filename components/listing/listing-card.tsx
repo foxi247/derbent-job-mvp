@@ -16,7 +16,7 @@ export function ListingCard({ listing }: { listing: ListingWithProfile }) {
   const avatarLetter = workerName[0]?.toUpperCase() ?? "И";
 
   return (
-    <Card className="group surface space-y-3 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+    <Card className="group surface flex h-full flex-col space-y-3 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary font-semibold text-foreground">{avatarLetter}</span>
         <span className="truncate">{workerName}</span>
@@ -40,7 +40,7 @@ export function ListingCard({ listing }: { listing: ListingWithProfile }) {
 
       <p className="line-clamp-2 text-sm text-muted-foreground">{listing.description}</p>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-auto flex flex-wrap gap-2">
         {profile?.isOnline && <Badge className="bg-emerald-100 text-emerald-700">В сети</Badge>}
         {profile?.urgentToday && <Badge className="bg-amber-100 text-amber-800">Срочно / сегодня</Badge>}
         <Badge>{profile?.experienceYears ?? 0} лет стажа</Badge>

@@ -10,8 +10,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  if (parsed.data.listingId) {
+    const exists = await prisma.listing.findUnique({ where: { id: parsed.data.listingId }, select: { id: true } });
+    if (!exists) {
+      return NextResponse.json({ error: "Объявление исполнителя не найдено" }, { status: 404 });
+    }
+  }
+
+  if (parsed.data.jobPostId) {
+    const exists = await prisma.jobPost.findUnique({ where: { id: parsed.data.jobPostId }, select: { id: true } });
+    if (!exists) {
+      return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
+    }
+  }
+
   const message = await prisma.message.create({
-    data: parsed.data
+    data: {
+      listingId: parsed.data.listingId ?? null,
+      jobPostId: parsed.data.jobPostId ?? null,
+      senderName: parsed.data.senderName,
+      senderContact: parsed.data.senderContact,
+      text: parsed.data.text
+    }
   });
 
   return NextResponse.json(message, { status: 201 });

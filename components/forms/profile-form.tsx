@@ -11,6 +11,7 @@ type ProfileInitial = {
   experienceYears: number;
   skills: string;
   availability: string;
+  phone: string;
 };
 
 const EXPERIENCE_PRESETS = [0, 1, 2, 3, 5, 7, 10];
@@ -20,6 +21,7 @@ export function ProfileForm({ initial }: { initial: ProfileInitial }) {
   const [experienceYears, setExperienceYears] = useState(String(initial.experienceYears));
   const [skills, setSkills] = useState(initial.skills);
   const [availability, setAvailability] = useState(initial.availability);
+  const [phone, setPhone] = useState(initial.phone);
   const [result, setResult] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -43,7 +45,8 @@ export function ProfileForm({ initial }: { initial: ProfileInitial }) {
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
-        availability
+        availability,
+        phone: phone.trim() ? phone.trim() : null
       })
     });
 
@@ -61,11 +64,11 @@ export function ProfileForm({ initial }: { initial: ProfileInitial }) {
   return (
     <form onSubmit={submit} className="surface space-y-3 p-4">
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Профиль исполнителя</h2>
-        <p className="text-xs text-muted-foreground">Эти данные показываются в карточке объявления. Стаж можно менять и при создании объявления.</p>
+        <h2 className="text-lg font-semibold">Профиль пользователя</h2>
+        <p className="text-xs text-muted-foreground">Телефон скрывается и открывается только авторизованным по кнопке.</p>
       </div>
 
-      <Textarea value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Кто вы, какой опыт и задачи берете" required />
+      <Textarea value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Кто вы, какой опыт и задачи берете (для работодателя можно оставить пустым)" />
 
       <div className="grid gap-2 md:grid-cols-2">
         <Select value={experienceYears} onChange={(e) => setExperienceYears(e.target.value)}>
@@ -85,12 +88,12 @@ export function ProfileForm({ initial }: { initial: ProfileInitial }) {
           value={experienceYears}
           onChange={(e) => setExperienceYears(e.target.value)}
           placeholder="Или введите вручную"
-          required
         />
       </div>
 
-      <Input value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="Навыки через запятую" required />
-      <Input value={availability} onChange={(e) => setAvailability(e.target.value)} placeholder="График/доступность" required />
+      <Input value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="Навыки через запятую (опционально)" />
+      <Input value={availability} onChange={(e) => setAvailability(e.target.value)} placeholder="График/доступность (опционально)" />
+      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Телефон (опционально), например +7 928 000-00-00" />
 
       <Button type="submit" disabled={isSaving}>
         {isSaving ? "Сохраняем..." : "Сохранить"}

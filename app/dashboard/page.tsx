@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ListingForm } from "@/components/forms/listing-form";
 import { ProfileForm } from "@/components/forms/profile-form";
 import { StatusToggles } from "@/components/forms/status-toggles";
+import { PromotionButton } from "@/components/forms/promotion-button";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -12,7 +13,7 @@ export default async function DashboardPage() {
   }
 
   if (session.user.role !== "EXECUTOR") {
-    redirect("/");
+    redirect("/auth/role");
   }
 
   const [profile, listings] = await Promise.all([
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
       <section className="surface p-5">
         <h1 className="text-2xl font-semibold">Кабинет исполнителя</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Здесь вы управляете профилем (стаж, навыки) и объявлениями.
+          Здесь вы управляете профилем, объявлениями и продлением размещения.
         </p>
       </section>
 
@@ -36,7 +37,8 @@ export default async function DashboardPage() {
           about: profile?.about ?? "",
           experienceYears: profile?.experienceYears ?? 0,
           skills: (profile?.skills ?? []).join(", "),
-          availability: profile?.availability ?? ""
+          availability: profile?.availability ?? "",
+          phone: profile?.phone ?? ""
         }}
       />
 
@@ -59,6 +61,10 @@ export default async function DashboardPage() {
               </div>
 
               <p className="line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
+              <p className="text-xs text-muted-foreground">
+                Срок размещения: {item.expiresAt ? new Date(item.expiresAt).toLocaleDateString("ru-RU") : "не задан"}
+              </p>
+              <PromotionButton endpoint={`/api/listings/${item.id}/promote`} />
               <ListingForm listing={item} compact />
             </article>
           ))

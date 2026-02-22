@@ -16,7 +16,7 @@ export default async function ProfilePage() {
       <div className="surface p-5">
         <h1 className="text-2xl font-semibold">Профиль</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Заполните данные о себе: стаж, навыки, график и описание.
+          Настройте информацию о себе и добавьте телефон для безопасного показа по кнопке.
         </p>
       </div>
 
@@ -25,7 +25,8 @@ export default async function ProfilePage() {
           about: profile?.about ?? "",
           experienceYears: profile?.experienceYears ?? 0,
           skills: (profile?.skills ?? []).join(", "),
-          availability: profile?.availability ?? ""
+          availability: profile?.availability ?? "",
+          phone: profile?.phone ?? ""
         }}
       />
     </div>

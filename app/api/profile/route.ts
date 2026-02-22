@@ -25,13 +25,15 @@ export async function POST(req: NextRequest) {
       about: parsed.data.about,
       experienceYears: parsed.data.experienceYears,
       skills: parsed.data.skills,
-      availability: parsed.data.availability
+      availability: parsed.data.availability,
+      phone: parsed.data.phone ?? null
     },
     update: {
       about: parsed.data.about,
       experienceYears: parsed.data.experienceYears,
       skills: parsed.data.skills,
-      availability: parsed.data.availability
+      availability: parsed.data.availability,
+      phone: parsed.data.phone ?? null
     }
   });
 

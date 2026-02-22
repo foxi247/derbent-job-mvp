@@ -17,7 +17,7 @@ export function RoleSelector({ currentRole }: { currentRole: "EXECUTOR" | "EMPLO
 
     if (res.ok) {
       startTransition(() => {
-        router.push(role === "EXECUTOR" ? "/dashboard" : "/");
+        router.push(role === "EXECUTOR" ? "/dashboard" : "/dashboard-employer");
         router.refresh();
       });
     }

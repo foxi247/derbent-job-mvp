@@ -1,5 +1,6 @@
 import { Listing, ListingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { pauseExpiredPublications } from "@/lib/visibility";
 
 export type ListingWithProfile = Listing & {
   user: {
@@ -10,6 +11,7 @@ export type ListingWithProfile = Listing & {
       experienceYears: number;
       skills: string[];
       availability: string;
+      phone: string | null;
       isOnline: boolean;
       urgentToday: boolean;
     } | null;
@@ -27,6 +29,8 @@ export type ListingFilters = {
 };
 
 export async function getListings(filters: ListingFilters): Promise<ListingWithProfile[]> {
+  await pauseExpiredPublications();
+
   const experienceYears: Prisma.IntFilter = {};
   if (typeof filters.experienceMin === "number") {
     experienceYears.gte = filters.experienceMin;
@@ -44,6 +48,7 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
   const where: Prisma.ListingWhereInput = {
     status: ListingStatus.ACTIVE,
     city: "DERBENT",
+    expiresAt: { gt: new Date() },
     ...(filters.category ? { category: filters.category } : {}),
     ...(filters.priceType ? { priceType: filters.priceType } : {}),
     ...(filters.query
@@ -81,6 +86,7 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
               experienceYears: true,
               skills: true,
               availability: true,
+              phone: true,
               isOnline: true,
               urgentToday: true
             }

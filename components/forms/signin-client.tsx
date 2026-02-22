@@ -86,7 +86,7 @@ export function SignInClient() {
             signIn("demo", {
               email: "demo.employer@local.test",
               role: "EMPLOYER",
-              callbackUrl: "/"
+              callbackUrl: "/dashboard-employer"
             })
           )
         }
