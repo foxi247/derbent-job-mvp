@@ -4,15 +4,18 @@ import { FormEvent, useState, useTransition } from "react";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StatusAlert } from "@/components/ui/status-alert";
 
 export function SignInClient() {
   const [email, setEmail] = useState("");
   const [isPending, startTransition] = useTransition();
   const [info, setInfo] = useState("");
+  const [isError, setIsError] = useState(false);
 
   async function onEmail(e: FormEvent) {
     e.preventDefault();
     setInfo("");
+    setIsError(false);
 
     const result = await signIn("email", {
       email,
@@ -22,8 +25,10 @@ export function SignInClient() {
 
     if (result?.ok) {
       setInfo("Проверьте email: отправили ссылку для входа.");
+      setIsError(false);
     } else {
       setInfo("Не удалось отправить ссылку.");
+      setIsError(true);
     }
   }
 
@@ -31,13 +36,13 @@ export function SignInClient() {
     <div className="space-y-3">
       <form onSubmit={onEmail} className="space-y-2">
         <Input type="email" required placeholder="Ваш email" value={email} onChange={(event) => setEmail(event.target.value)} />
-        <Button className="w-full" type="submit" disabled={isPending}>
+        <Button className="h-11 w-full" type="submit" disabled={isPending}>
           Войти по email
         </Button>
       </form>
 
       <Button
-        className="w-full"
+        className="h-11 w-full"
         variant="outline"
         disabled={isPending}
         onClick={() => startTransition(() => signIn("google", { callbackUrl: "/auth/role" }))}
@@ -46,7 +51,7 @@ export function SignInClient() {
       </Button>
 
       <Button
-        className="w-full"
+        className="h-11 w-full"
         variant="outline"
         disabled={isPending}
         onClick={() => startTransition(() => signIn("yandex", { callbackUrl: "/auth/role" }))}
@@ -110,7 +115,8 @@ export function SignInClient() {
         </div>
       </details>
 
-      {info && <p className="text-sm text-muted-foreground">{info}</p>}
+      {info && <StatusAlert message={info} tone={isError ? "error" : "info"} />}
     </div>
   );
 }
+

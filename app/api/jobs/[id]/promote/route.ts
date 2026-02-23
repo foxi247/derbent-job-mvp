@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { assertNotBanned } from "@/lib/access";
+import { prisma } from "@/lib/prisma";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 import { publishJobByTariff } from "@/lib/tariffs";
 import { publicationTariffSchema } from "@/lib/validations";
 
@@ -15,28 +17,51 @@ function mapPublicationError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
   if (message === "NOT_ENOUGH_BALANCE") {
-    return NextResponse.json({ error: "Недостаточно средств на балансе" }, { status: 400 });
+    return apiError("Недостаточно средств на балансе", 400, { code: "NOT_ENOUGH_BALANCE" });
   }
   if (message === "TARIFF_NOT_FOUND") {
-    return NextResponse.json({ error: "Тариф не найден или отключен" }, { status: 404 });
+    return apiError("Тариф не найден или отключен", 404, { code: "TARIFF_NOT_FOUND" });
   }
   if (message === "USER_BANNED") {
-    return NextResponse.json({ error: "Аккаунт заблокирован. Публикация недоступна" }, { status: 403 });
+    return apiError("Аккаунт заблокирован. Публикация недоступна", 403, { code: "USER_BANNED" });
+  }
+  if (message === "FORBIDDEN") {
+    return apiError("Можно продлевать только свои задания", 403, { code: "FORBIDDEN" });
+  }
+  if (message === "JOB_NOT_FOUND") {
+    return apiError("Задание не найдено", 404, { code: "JOB_NOT_FOUND" });
   }
 
-  throw error;
+  return apiError("Не удалось продлить публикацию", 500, { code: "PROMOTION_FAILED" });
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
   const session = await auth();
   if (!session?.user || session.user.role !== "EMPLOYER") {
-    return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+    return apiError("Нет доступа", 403, { code: "FORBIDDEN" });
   }
 
   try {
     await assertNotBanned(session.user.id);
   } catch {
-    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+    return apiError("Аккаунт заблокирован", 403, { code: "USER_BANNED" });
+  }
+
+  const rateLimit = await checkRateLimit({
+    action: "job_promote",
+    key: buildRateLimitKey(req, session.user.id),
+    limit: 12,
+    windowMs: 60 * 1000,
+    userId: session.user.id
+  });
+
+  if (!rateLimit.ok) {
+    return apiError("Слишком много попыток продления. Попробуйте чуть позже.", 429, {
+      code: "RATE_LIMITED",
+      headers: {
+        "Retry-After": String(rateLimit.retryAfterSeconds)
+      }
+    });
   }
 
   const job = await prisma.jobPost.findUnique({
@@ -45,17 +70,17 @@ export async function POST(req: NextRequest, context: RouteContext) {
   });
 
   if (!job) {
-    return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
+    return apiError("Задание не найдено", 404, { code: "NOT_FOUND" });
   }
 
   if (job.userId !== session.user.id) {
-    return NextResponse.json({ error: "Можно продлевать только свои задания" }, { status: 403 });
+    return apiError("Можно продлевать только свои задания", 403, { code: "FORBIDDEN" });
   }
 
   const body = await req.json().catch(() => ({}));
   const parsed = publicationTariffSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
   try {
@@ -64,8 +89,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       userId: session.user.id,
       tariffPlanId: parsed.data.tariffPlanId
     });
-    return NextResponse.json(updated);
+    return jsonResponse(updated, { noStore: true });
   } catch (error) {
     return mapPublicationError(error);
   }
 }
+

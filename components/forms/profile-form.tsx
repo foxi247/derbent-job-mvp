@@ -2,9 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { StatusAlert } from "@/components/ui/status-alert";
 import { Textarea } from "@/components/ui/textarea";
 
 type ProfileInitial = {
@@ -35,6 +37,7 @@ export function ProfileForm({ initial, role }: { initial: ProfileInitial; role: 
   const [availability, setAvailability] = useState(initial.availability);
   const [phone, setPhone] = useState(initial.phone);
   const [result, setResult] = useState("");
+  const [isError, setIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const normalizedYears = useMemo(() => {
@@ -61,17 +64,20 @@ export function ProfileForm({ initial, role }: { initial: ProfileInitial; role: 
     if (role === "EXECUTOR") {
       if (!phone.trim()) {
         setResult("Телефон обязателен для исполнителя");
+        setIsError(true);
         return;
       }
 
       if (!workCategory.trim()) {
         setResult("Укажите категорию, по которой ищете работу");
+        setIsError(true);
         return;
       }
     }
 
     setIsSaving(true);
     setResult("");
+    setIsError(false);
 
     const response = await fetch("/api/profile", {
       method: "POST",
@@ -96,24 +102,25 @@ export function ProfileForm({ initial, role }: { initial: ProfileInitial; role: 
 
     if (response.ok) {
       setResult("Профиль сохранен");
+      setIsError(false);
       router.refresh();
       return;
     }
 
     const data = await response.json().catch(() => null);
-    const details = data?.error ? " Проверьте поля формы." : "";
-    setResult(`Ошибка сохранения.${details}`);
+    setResult(extractApiErrorMessage(data, "Ошибка сохранения профиля"));
+    setIsError(true);
   }
 
   return (
     <form onSubmit={submit} className="surface space-y-4 p-4 md:p-5">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">Профиль</h2>
-        <p className="text-sm text-muted-foreground">Телефон скрыт и открывается только авторизованным по кнопке.</p>
+        <p className="text-sm text-muted-foreground">Телефон скрыт и открывается только авторизованным пользователям по кнопке.</p>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <Select value={gender} onChange={(event) => setGender(event.target.value as "MALE" | "FEMALE" | "") }>
+        <Select value={gender} onChange={(event) => setGender(event.target.value as "MALE" | "FEMALE" | "")}>
           <option value="">Пол</option>
           <option value="MALE">Мужской</option>
           <option value="FEMALE">Женский</option>
@@ -148,41 +155,25 @@ export function ProfileForm({ initial, role }: { initial: ProfileInitial; role: 
         />
       </div>
 
-      <Input
-        value={previousWork}
-        onChange={(event) => setPreviousWork(event.target.value)}
-        placeholder="Где работали раньше (опционально)"
-      />
+      <Input value={previousWork} onChange={(event) => setPreviousWork(event.target.value)} placeholder="Где работали раньше (опционально)" />
 
       <Textarea value={about} onChange={(event) => setAbout(event.target.value)} placeholder="Коротко о себе" />
 
       <details className="rounded-lg border bg-background/70 p-3 text-sm">
         <summary className="cursor-pointer font-medium">Дополнительно</summary>
         <div className="mt-3 grid gap-2">
-          <Input
-            value={skills}
-            onChange={(event) => setSkills(event.target.value)}
-            placeholder="Навыки через запятую (опционально)"
-          />
-          <Input
-            value={availability}
-            onChange={(event) => setAvailability(event.target.value)}
-            placeholder="График/доступность"
-          />
-          <Input
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="Телефон"
-            required={role === "EXECUTOR"}
-          />
+          <Input value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="Навыки через запятую (опционально)" />
+          <Input value={availability} onChange={(event) => setAvailability(event.target.value)} placeholder="График/доступность" />
+          <Input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Телефон" required={role === "EXECUTOR"} />
         </div>
       </details>
 
-      <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
+      <Button type="submit" disabled={isSaving} className="h-11 w-full sm:w-auto">
         {isSaving ? "Сохраняем..." : "Сохранить"}
       </Button>
 
-      {result && <p className="text-sm text-muted-foreground">{result}</p>}
+      {result && <StatusAlert message={result} tone={isError ? "error" : "success"} />}
     </form>
   );
 }
+

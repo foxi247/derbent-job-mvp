@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { DeleteSavedSearchButton } from "@/components/forms/delete-saved-search-button";
@@ -65,7 +64,7 @@ export default async function SavedSearchesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button asChild size="sm" variant="outline">
-                    <Link href={href}>Открыть</Link>
+                    <a href={href}>Открыть</a>
                   </Button>
                   <DeleteSavedSearchButton id={row.id} />
                 </div>

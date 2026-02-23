@@ -1,14 +1,14 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Manrope } from "next/font/google";
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
+import { HeaderUserMenu } from "@/components/common/header-user-menu";
 import { NotificationsBell } from "@/components/common/notifications-bell";
 import { WalletBalanceWidget } from "@/components/forms/wallet-balance-widget";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { CITY_LABEL } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/site-url";
-import { cn } from "@/lib/utils";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -35,7 +35,9 @@ export const metadata: Metadata = {
   }
 };
 
-function getCabinetHref(role: "EXECUTOR" | "EMPLOYER" | "ADMIN" | undefined) {
+function getCabinetHref(
+  role: "EXECUTOR" | "EMPLOYER" | "ADMIN" | undefined
+): "/dashboard" | "/dashboard-employer" | "/admin" {
   if (role === "ADMIN") return "/admin";
   if (role === "EMPLOYER") return "/dashboard-employer";
   return "/dashboard";
@@ -91,122 +93,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <>
                   <NotificationsBell unreadCount={unreadCount} />
                   <WalletBalanceWidget initialBalanceRub={session.user.balanceRub} />
-
                   <Button asChild size="sm" className="hidden sm:inline-flex">
                     <Link href={cabinetHref}>Кабинет</Link>
                   </Button>
-
-                  <details className="relative">
-                    <summary
-                      className={cn(
-                        buttonVariants({ variant: "outline", size: "sm" }),
-                        "list-none cursor-pointer select-none"
-                      )}
-                    >
-                      Меню
-                    </summary>
-                    <div className="absolute right-0 z-50 mt-2 w-52 rounded-xl border bg-white p-2 shadow-lg">
-                      <Link href={cabinetHref} className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                        Кабинет
-                      </Link>
-                      <Link href="/profile" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                        Профиль
-                      </Link>
-                      <Link href="/notifications" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                        Уведомления
-                      </Link>
-                      <Link href="/favorites" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                        Избранное
-                      </Link>
-                      <Link href="/saved-searches" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                        Сохраненные поиски
-                      </Link>
-                      <Link href="/how-it-works" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                        Как это работает
-                      </Link>
-                      {role === "ADMIN" && (
-                        <Link href="/admin" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                          Админка
-                        </Link>
-                      )}
-                      <form
-                        action={async () => {
-                          "use server";
-                          await signOut({ redirectTo: "/" });
-                        }}
-                      >
-                        <button type="submit" className="block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-secondary">
-                          Выйти
-                        </button>
-                      </form>
-                    </div>
-                  </details>
+                  <HeaderUserMenu isAuthenticated role={role} cabinetHref={cabinetHref} />
                 </>
               ) : (
-                <Button asChild size="sm">
-                  <Link href="/auth/signin">Войти</Link>
-                </Button>
+                <>
+                  <Button asChild size="sm" className="hidden sm:inline-flex">
+                    <Link href="/auth/signin">Войти</Link>
+                  </Button>
+                  <HeaderUserMenu isAuthenticated={false} />
+                </>
               )}
             </div>
-          </div>
-
-          <div className="border-t px-4 py-2 md:hidden">
-            <details>
-              <summary className="cursor-pointer text-sm font-medium">Навигация</summary>
-              <div className="mt-2 grid gap-1">
-                <Link href="/" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                  Исполнители
-                </Link>
-                <Link href="/jobs" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                  Задания
-                </Link>
-                {session?.user && (
-                  <Link href="/favorites" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                    Избранное
-                  </Link>
-                )}
-                {session?.user && (
-                  <Link href="/saved-searches" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                    Сохраненные поиски
-                  </Link>
-                )}
-                {session?.user && (
-                  <Link href="/notifications" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                    Уведомления
-                  </Link>
-                )}
-                {session?.user && (
-                  <Link href={cabinetHref} className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                    Кабинет
-                  </Link>
-                )}
-                {session?.user && (
-                  <Link href="/profile" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                    Профиль
-                  </Link>
-                )}
-                <Link href="/support" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                  Поддержка
-                </Link>
-                {role === "ADMIN" && (
-                  <Link href="/admin" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
-                    Админка
-                  </Link>
-                )}
-                {session?.user && (
-                  <form
-                    action={async () => {
-                      "use server";
-                      await signOut({ redirectTo: "/" });
-                    }}
-                  >
-                    <button type="submit" className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-secondary">
-                      Выйти
-                    </button>
-                  </form>
-                )}
-              </div>
-            </details>
           </div>
         </header>
 

@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { JobApplicationStatus } from "@prisma/client";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { assertNotBanned } from "@/lib/access";
 import { createNotificationSafe } from "@/lib/notifications";
+import { prisma } from "@/lib/prisma";
 import { jobApplicationStatusSchema } from "@/lib/validations";
 
 type RouteContext = {
@@ -11,30 +13,47 @@ type RouteContext = {
   };
 };
 
-const statusLabel: Record<string, string> = {
-  VIEWED: "Просмотрено",
-  ACCEPTED: "Принято",
-  REJECTED: "Отклонено",
-  COMPLETED: "Завершено",
-  CANCELED: "Отменено"
+const statusLabel: Record<JobApplicationStatus, string> = {
+  SENT: "Отправлен",
+  VIEWED: "Просмотрен",
+  ACCEPTED: "Принят",
+  REJECTED: "Отклонен",
+  COMPLETED: "Завершен",
+  CANCELED: "Отменен"
 };
+
+const transitionMap: Record<JobApplicationStatus, JobApplicationStatus[]> = {
+  SENT: ["VIEWED", "ACCEPTED", "REJECTED"],
+  VIEWED: ["ACCEPTED", "REJECTED"],
+  ACCEPTED: ["COMPLETED", "CANCELED"],
+  REJECTED: [],
+  COMPLETED: [],
+  CANCELED: []
+};
+
+function canTransition(from: JobApplicationStatus, to: JobApplicationStatus) {
+  if (from === to) {
+    return true;
+  }
+  return transitionMap[from].includes(to);
+}
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
   const session = await auth();
   if (!session?.user || session.user.role !== "EMPLOYER") {
-    return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+    return apiError("Нет доступа", 403, { code: "FORBIDDEN" });
   }
 
   try {
     await assertNotBanned(session.user.id);
   } catch {
-    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+    return apiError("Аккаунт заблокирован", 403, { code: "USER_BANNED" });
   }
 
   const body = await req.json().catch(() => ({}));
   const parsed = jobApplicationStatusSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
   const application = await prisma.jobApplication.findUnique({
@@ -50,11 +69,19 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   });
 
   if (!application) {
-    return NextResponse.json({ error: "Отклик не найден" }, { status: 404 });
+    return apiError("Отклик не найден", 404, { code: "NOT_FOUND" });
   }
 
   if (application.employerUserId !== session.user.id) {
-    return NextResponse.json({ error: "Можно менять статус только своих откликов" }, { status: 403 });
+    return apiError("Можно менять статус только своих откликов", 403, { code: "FORBIDDEN" });
+  }
+
+  if (!canTransition(application.status, parsed.data.status)) {
+    return apiError("Недопустимая смена статуса", 400, { code: "INVALID_STATUS_TRANSITION" });
+  }
+
+  if (application.status === parsed.data.status) {
+    return jsonResponse(application, { noStore: true });
   }
 
   const updated = await prisma.jobApplication.update({
@@ -72,5 +99,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     link: "/dashboard"
   });
 
-  return NextResponse.json(updated);
+  return jsonResponse(updated, { noStore: true });
 }
+

@@ -1,5 +1,5 @@
-import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { SignInClient } from "@/components/forms/signin-client";
 
 export default async function SignInPage() {
@@ -18,3 +18,4 @@ export default async function SignInPage() {
     </div>
   );
 }
+

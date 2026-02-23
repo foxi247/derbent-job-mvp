@@ -1,9 +1,11 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { StatusAlert } from "@/components/ui/status-alert";
 import { Textarea } from "@/components/ui/textarea";
 
 type ReportMenuProps = {
@@ -19,6 +21,7 @@ export function ReportMenu({ targetType, listingId, jobPostId, targetUserId }: R
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -26,6 +29,7 @@ export function ReportMenu({ targetType, listingId, jobPostId, targetUserId }: R
 
     setLoading(true);
     setMessage("");
+    setIsError(false);
 
     const response = await fetch("/api/reports", {
       method: "POST",
@@ -45,6 +49,7 @@ export function ReportMenu({ targetType, listingId, jobPostId, targetUserId }: R
 
     if (response.ok) {
       setMessage("Жалоба отправлена");
+      setIsError(false);
       setReason("");
       setText("");
       setTimeout(() => {
@@ -54,14 +59,15 @@ export function ReportMenu({ targetType, listingId, jobPostId, targetUserId }: R
       return;
     }
 
-    setMessage(payload?.error ?? "Не удалось отправить жалобу");
+    setMessage(extractApiErrorMessage(payload, "Не удалось отправить жалобу"));
+    setIsError(true);
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="h-8 w-8 rounded-full p-0">
-          ⋯
+          ...
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -76,18 +82,14 @@ export function ReportMenu({ targetType, listingId, jobPostId, targetUserId }: R
 
         <form onSubmit={submit} className="space-y-3">
           <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Причина" required />
-          <Textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="Комментарий (опционально)"
-            maxLength={1000}
-          />
+          <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Комментарий (опционально)" maxLength={1000} />
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Отправляем..." : "Отправить"}
           </Button>
         </form>
-        {message && <p className="text-xs text-muted-foreground">{message}</p>}
+        {message && <StatusAlert message={message} tone={isError ? "error" : "success"} className="text-xs" />}
       </DialogContent>
     </Dialog>
   );
 }
+

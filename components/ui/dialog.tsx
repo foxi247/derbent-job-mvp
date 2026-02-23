@@ -38,12 +38,17 @@ export function DialogTrigger({ asChild = false, ...props }: DialogTriggerProps)
   const { onOpenChange } = useDialogContext();
   const Comp = asChild ? Slot : "button";
 
-  return <Comp {...props} onClick={(event) => {
-    props.onClick?.(event as never);
-    if (!event.defaultPrevented) {
-      onOpenChange(true);
-    }
-  }} />;
+  return (
+    <Comp
+      {...props}
+      onClick={(event) => {
+        props.onClick?.(event as never);
+        if (!event.defaultPrevented) {
+          onOpenChange(true);
+        }
+      }}
+    />
+  );
 }
 
 type DialogCloseProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -54,17 +59,21 @@ export function DialogClose({ asChild = false, ...props }: DialogCloseProps) {
   const { onOpenChange } = useDialogContext();
   const Comp = asChild ? Slot : "button";
 
-  return <Comp {...props} onClick={(event) => {
-    props.onClick?.(event as never);
-    if (!event.defaultPrevented) {
-      onOpenChange(false);
-    }
-  }} />;
+  return (
+    <Comp
+      {...props}
+      onClick={(event) => {
+        props.onClick?.(event as never);
+        if (!event.defaultPrevented) {
+          onOpenChange(false);
+        }
+      }}
+    />
+  );
 }
 
 type DialogContentProps = React.HTMLAttributes<HTMLDivElement> & {
   children: React.ReactNode;
-  showCloseButton?: boolean;
 };
 
 export function DialogContent({ className, children, ...props }: DialogContentProps) {
@@ -125,3 +134,4 @@ export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLD
 export function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return <h2 className={cn("text-base font-semibold", className)} {...props} />;
 }
+

@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import { ListingForm } from "@/components/forms/listing-form";
 import { ProfileForm } from "@/components/forms/profile-form";
-import { StatusToggles } from "@/components/forms/status-toggles";
 import { PromotionButton } from "@/components/forms/promotion-button";
+import { StatusToggles } from "@/components/forms/status-toggles";
 import { ensureExpiringPublicationNotifications } from "@/lib/notifications";
+import { prisma } from "@/lib/prisma";
 
 const applicationStatusLabel: Record<string, string> = {
   SENT: "Отправлен",
@@ -68,7 +68,7 @@ export default async function DashboardPage() {
       <section className="surface p-5">
         <h1 className="text-2xl font-semibold">Кабинет исполнителя</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Простой сценарий: заполните профиль, пополните баланс и опубликуйте анкету по тарифу.
+          Заполните профиль, пополните баланс и опубликуйте анкету по тарифу.
         </p>
         {user?.isBanned && (
           <p className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -121,11 +121,10 @@ export default async function DashboardPage() {
                   Срок размещения: {item.expiresAt ? new Date(item.expiresAt).toLocaleDateString("ru-RU") : "не задан"}
                 </p>
 
-                <PromotionButton endpoint={`/api/listings/${item.id}/promote`} tariffs={tariffs} />
-
                 <details className="rounded-lg border bg-background/70 p-3 text-sm">
-                  <summary className="cursor-pointer font-medium">Редактировать анкету</summary>
-                  <div className="mt-3">
+                  <summary className="cursor-pointer font-medium">... Действия</summary>
+                  <div className="mt-3 space-y-3">
+                    <PromotionButton endpoint={`/api/listings/${item.id}/promote`} tariffs={tariffs} />
                     <ListingForm
                       listing={{
                         id: item.id,
@@ -172,3 +171,4 @@ export default async function DashboardPage() {
     </div>
   );
 }
+

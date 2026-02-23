@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { FavoriteToggle } from "@/components/common/favorite-toggle";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { ListingWithProfile } from "@/lib/listings";
 import {
   PRICE_TYPE_LABELS,
@@ -6,9 +9,19 @@ import {
   TARIFF_KIND_CARD_STYLES,
   TARIFF_KIND_LABELS
 } from "@/lib/constants";
-import { FavoriteToggle } from "@/components/common/favorite-toggle";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+
+function formatRub(value: string | number | null) {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "—";
+  }
+
+  return `${new Intl.NumberFormat("ru-RU").format(numericValue)} ₽`;
+}
 
 export function ListingCard({
   listing,
@@ -52,7 +65,7 @@ export function ListingCard({
 
         <div className="text-right text-sm">
           <div className="font-medium">
-            {listing.priceType === "NEGOTIABLE" ? "Договорная" : `${listing.priceValue ?? "-"} RUB`}
+            {listing.priceType === "NEGOTIABLE" ? "Договорная" : formatRub(listing.priceValue?.toString() ?? null)}
           </div>
           <div className="text-xs text-muted-foreground">{PRICE_TYPE_LABELS[listing.priceType]}</div>
         </div>
@@ -70,3 +83,4 @@ export function ListingCard({
     </Card>
   );
 }
+

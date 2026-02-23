@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { StatusAlert } from "@/components/ui/status-alert";
 import { Textarea } from "@/components/ui/textarea";
 
 type ExecutorOption = {
@@ -20,17 +22,20 @@ export function ReviewForm({ jobPostId, executors }: ReviewFormProps) {
   const [rating, setRating] = useState("5");
   const [text, setText] = useState("");
   const [result, setResult] = useState("");
+  const [isError, setIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!executorUserId) {
       setResult("Выберите исполнителя");
+      setIsError(true);
       return;
     }
 
     setIsSaving(true);
     setResult("");
+    setIsError(false);
 
     const response = await fetch("/api/reviews", {
       method: "POST",
@@ -47,11 +52,13 @@ export function ReviewForm({ jobPostId, executors }: ReviewFormProps) {
     if (response.ok) {
       setText("");
       setResult("Отзыв сохранен");
+      setIsError(false);
       return;
     }
 
     const payload = await response.json().catch(() => null);
-    setResult(payload?.error ?? "Не удалось сохранить отзыв");
+    setResult(extractApiErrorMessage(payload, "Не удалось сохранить отзыв"));
+    setIsError(true);
   }
 
   return (
@@ -80,7 +87,8 @@ export function ReviewForm({ jobPostId, executors }: ReviewFormProps) {
       <Button type="submit" disabled={isSaving || executors.length === 0}>
         {isSaving ? "Сохраняем..." : "Оставить отзыв"}
       </Button>
-      {result && <p className="text-sm text-muted-foreground">{result}</p>}
+      {result && <StatusAlert message={result} tone={isError ? "error" : "success"} />}
     </form>
   );
 }
+

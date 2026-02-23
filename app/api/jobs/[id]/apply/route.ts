@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { assertNotBanned } from "@/lib/access";
 import { createNotificationSafe } from "@/lib/notifications";
+import { prisma } from "@/lib/prisma";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 import { jobApplicationCreateSchema } from "@/lib/validations";
 
@@ -15,13 +17,13 @@ type RouteContext = {
 export async function POST(req: NextRequest, context: RouteContext) {
   const session = await auth();
   if (!session?.user || session.user.role !== "EXECUTOR") {
-    return NextResponse.json({ error: "Отклик доступен только исполнителю" }, { status: 403 });
+    return apiError("Отклик доступен только исполнителю", 403, { code: "FORBIDDEN" });
   }
 
   try {
     await assertNotBanned(session.user.id);
   } catch {
-    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+    return apiError("Аккаунт заблокирован", 403, { code: "USER_BANNED" });
   }
 
   const rateLimit = await checkRateLimit({
@@ -33,21 +35,18 @@ export async function POST(req: NextRequest, context: RouteContext) {
   });
 
   if (!rateLimit.ok) {
-    return NextResponse.json(
-      { error: "Слишком много откликов. Попробуйте чуть позже." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(rateLimit.retryAfterSeconds)
-        }
+    return apiError("Слишком много откликов. Попробуйте чуть позже.", 429, {
+      code: "RATE_LIMITED",
+      headers: {
+        "Retry-After": String(rateLimit.retryAfterSeconds)
       }
-    );
+    });
   }
 
   const body = await req.json().catch(() => ({}));
   const parsed = jobApplicationCreateSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
   const job = await prisma.jobPost.findUnique({
@@ -56,47 +55,71 @@ export async function POST(req: NextRequest, context: RouteContext) {
   });
 
   if (!job) {
-    return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
+    return apiError("Задание не найдено", 404, { code: "NOT_FOUND" });
   }
 
   if (job.userId === session.user.id) {
-    return NextResponse.json({ error: "Нельзя откликнуться на собственное задание" }, { status: 400 });
+    return apiError("Нельзя откликнуться на собственное задание", 400, { code: "INVALID_TARGET" });
   }
 
   if (job.status !== "ACTIVE" || !job.expiresAt || job.expiresAt <= new Date()) {
-    return NextResponse.json({ error: "Откликнуться можно только на активное задание" }, { status: 400 });
+    return apiError("Откликнуться можно только на активное задание", 400, { code: "JOB_NOT_ACTIVE" });
   }
 
-  const existing = await prisma.jobApplication.findUnique({
-    where: {
-      jobPostId_executorUserId: {
-        jobPostId: job.id,
-        executorUserId: session.user.id
+  let created = false;
+  let application = null as
+    | {
+        id: string;
+        jobPostId: string;
+        executorUserId: string;
+        employerUserId: string;
+        status: "SENT" | "VIEWED" | "ACCEPTED" | "REJECTED" | "COMPLETED" | "CANCELED";
+        message: string | null;
+        createdAt: Date;
+        updatedAt: Date;
       }
-    }
-  });
+    | null;
 
-  if (existing) {
-    return NextResponse.json(existing);
+  try {
+    application = await prisma.jobApplication.create({
+      data: {
+        jobPostId: job.id,
+        executorUserId: session.user.id,
+        employerUserId: job.userId,
+        status: "SENT",
+        message: parsed.data.message?.trim() || null
+      }
+    });
+    created = true;
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+      throw error;
+    }
+
+    application = await prisma.jobApplication.findUnique({
+      where: {
+        jobPostId_executorUserId: {
+          jobPostId: job.id,
+          executorUserId: session.user.id
+        }
+      }
+    });
   }
 
-  const application = await prisma.jobApplication.create({
-    data: {
-      jobPostId: job.id,
-      executorUserId: session.user.id,
-      employerUserId: job.userId,
-      status: "SENT",
-      message: parsed.data.message?.trim() || null
-    }
-  });
+  if (!application) {
+    return apiError("Не удалось создать отклик. Повторите попытку.", 500, { code: "APPLICATION_CREATE_FAILED" });
+  }
 
-  await createNotificationSafe({
-    userId: job.userId,
-    type: "APPLICATION_NEW",
-    title: "Новый отклик",
-    body: `По заданию «${job.title}» пришел новый отклик.`,
-    link: "/dashboard-employer"
-  });
+  if (created) {
+    await createNotificationSafe({
+      userId: job.userId,
+      type: "APPLICATION_NEW",
+      title: "Новый отклик",
+      body: `По заданию «${job.title}» пришел новый отклик.`,
+      link: "/dashboard-employer"
+    });
+  }
 
-  return NextResponse.json(application, { status: 201 });
+  return jsonResponse(application, { status: created ? 201 : 200, noStore: true });
 }
+

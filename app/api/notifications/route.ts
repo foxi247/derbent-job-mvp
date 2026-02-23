@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { ensureExpiringPublicationNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { notificationQuerySchema } from "@/lib/validations";
@@ -7,7 +8,7 @@ import { notificationQuerySchema } from "@/lib/validations";
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+    return apiError("Не авторизован", 401, { code: "UNAUTHORIZED" });
   }
 
   if (session.user.role === "EXECUTOR" || session.user.role === "EMPLOYER") {
@@ -18,20 +19,25 @@ export async function GET(req: NextRequest) {
   const parsed = notificationQuerySchema.safeParse(params);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Некорректные параметры" }, { status: 400 });
+    return apiValidationError(parsed.error, "Некорректные параметры");
   }
+
+  const limit = parsed.data.limit ?? 30;
+  const offset = parsed.data.offset ?? 0;
 
   const where = {
     userId: session.user.id,
     ...(parsed.data.unreadOnly === "true" ? { isRead: false } : {})
   };
 
-  const [rows, unreadCount] = await Promise.all([
+  const [rows, total, unreadCount] = await Promise.all([
     prisma.notification.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: 100
+      take: limit,
+      skip: offset
     }),
+    prisma.notification.count({ where }),
     prisma.notification.count({
       where: {
         userId: session.user.id,
@@ -40,8 +46,15 @@ export async function GET(req: NextRequest) {
     })
   ]);
 
-  return NextResponse.json({
-    notifications: rows,
-    unreadCount
-  });
+  return jsonResponse(
+    {
+      notifications: rows,
+      unreadCount,
+      total,
+      limit,
+      offset
+    },
+    { noStore: true }
+  );
 }
+

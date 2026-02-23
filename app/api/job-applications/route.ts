@@ -1,18 +1,19 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
 import { jobApplicationQuerySchema } from "@/lib/validations";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+    return apiError("Не авторизован", 401, { code: "UNAUTHORIZED" });
   }
 
   const params = Object.fromEntries(req.nextUrl.searchParams.entries());
   const parsed = jobApplicationQuerySchema.safeParse(params);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Некорректные параметры" }, { status: 400 });
+    return apiValidationError(parsed.error, "Некорректные параметры");
   }
 
   const scope =
@@ -20,12 +21,12 @@ export async function GET(req: NextRequest) {
     (session.user.role === "EMPLOYER" ? "employer" : session.user.role === "EXECUTOR" ? "executor" : null);
 
   if (!scope) {
-    return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+    return apiError("Нет доступа", 403, { code: "FORBIDDEN" });
   }
 
   if (scope === "executor") {
     if (session.user.role !== "EXECUTOR") {
-      return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+      return apiError("Нет доступа", 403, { code: "FORBIDDEN" });
     }
 
     const applications = await prisma.jobApplication.findMany({
@@ -46,11 +47,11 @@ export async function GET(req: NextRequest) {
       orderBy: { updatedAt: "desc" }
     });
 
-    return NextResponse.json(applications);
+    return jsonResponse(applications, { noStore: true });
   }
 
   if (session.user.role !== "EMPLOYER") {
-    return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+    return apiError("Нет доступа", 403, { code: "FORBIDDEN" });
   }
 
   await prisma.jobApplication.updateMany({
@@ -95,5 +96,6 @@ export async function GET(req: NextRequest) {
     orderBy: { updatedAt: "desc" }
   });
 
-  return NextResponse.json(applications);
+  return jsonResponse(applications, { noStore: true });
 }
+

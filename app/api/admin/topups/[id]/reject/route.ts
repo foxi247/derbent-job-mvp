@@ -1,5 +1,6 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { createNotificationSafe } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { topUpAdminActionSchema } from "@/lib/validations";
@@ -14,40 +15,85 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
   const parsed = topUpAdminActionSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
-  const topUpRequest = await prisma.topUpRequest.findUnique({ where: { id: context.params.id } });
+  const now = new Date();
 
-  if (!topUpRequest) {
-    return NextResponse.json({ error: "Заявка не найдена" }, { status: 404 });
-  }
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const request = await tx.topUpRequest.findUnique({
+        where: { id: context.params.id },
+        select: {
+          id: true,
+          userId: true,
+          amountRub: true,
+          status: true,
+          expiresAt: true
+        }
+      });
 
-  if (topUpRequest.status !== "PENDING") {
-    return NextResponse.json({ error: "Можно отклонять только заявки в ожидании" }, { status: 400 });
-  }
+      if (!request) {
+        throw new Error("TOPUP_NOT_FOUND");
+      }
 
-  const nextStatus = topUpRequest.expiresAt <= new Date() ? "EXPIRED" : "REJECTED";
+      if (request.status !== "PENDING") {
+        throw new Error("TOPUP_ALREADY_PROCESSED");
+      }
 
-  const updated = await prisma.topUpRequest.update({
-    where: { id: topUpRequest.id },
-    data: {
-      status: nextStatus,
-      approverUserId: authResult.session.user.id,
-      adminNote: parsed.data.adminNote ?? null
+      const nextStatus = request.expiresAt <= now ? "EXPIRED" : "REJECTED";
+
+      const updatedCount = await tx.topUpRequest.updateMany({
+        where: {
+          id: request.id,
+          status: "PENDING"
+        },
+        data: {
+          status: nextStatus,
+          approverUserId: authResult.session.user.id,
+          adminNote: parsed.data.adminNote ?? null
+        }
+      });
+
+      if (updatedCount.count !== 1) {
+        throw new Error("TOPUP_ALREADY_PROCESSED");
+      }
+
+      const updated = await tx.topUpRequest.findUnique({
+        where: { id: request.id }
+      });
+
+      if (!updated) {
+        throw new Error("TOPUP_NOT_FOUND");
+      }
+
+      return updated;
+    });
+
+    await createNotificationSafe({
+      userId: result.userId,
+      type: "TOPUP_REJECTED",
+      title: result.status === "EXPIRED" ? "Заявка на пополнение истекла" : "Пополнение отклонено",
+      body:
+        result.status === "EXPIRED"
+          ? `Заявка на ${result.amountRub} ₽ истекла по времени.`
+          : `Заявка на ${result.amountRub} ₽ отклонена администратором.`,
+      link: "/profile"
+    });
+
+    return jsonResponse(result, { noStore: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+
+    if (message === "TOPUP_NOT_FOUND") {
+      return apiError("Заявка не найдена", 404, { code: "TOPUP_NOT_FOUND" });
     }
-  });
 
-  await createNotificationSafe({
-    userId: updated.userId,
-    type: "TOPUP_REJECTED",
-    title: nextStatus === "EXPIRED" ? "Заявка на пополнение истекла" : "Пополнение отклонено",
-    body:
-      nextStatus === "EXPIRED"
-        ? `Заявка на ${updated.amountRub} ₽ истекла по времени.`
-        : `Заявка на ${updated.amountRub} ₽ отклонена администратором.`,
-    link: "/profile"
-  });
+    if (message === "TOPUP_ALREADY_PROCESSED") {
+      return apiError("Заявка уже обработана", 409, { code: "TOPUP_ALREADY_PROCESSED" });
+    }
 
-  return NextResponse.json(updated);
+    return apiError("Не удалось отклонить пополнение", 500, { code: "TOPUP_REJECT_FAILED" });
+  }
 }
+

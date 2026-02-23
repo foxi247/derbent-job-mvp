@@ -1,16 +1,17 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { apiError } from "@/lib/api-response";
 
 export async function requireAdminSession() {
   const session = await auth();
 
   if (!session?.user) {
-    return { error: NextResponse.json({ error: "Не авторизован" }, { status: 401 }) };
+    return { error: apiError("Не авторизован", 401, { code: "UNAUTHORIZED" }) };
   }
 
   if (session.user.role !== "ADMIN") {
-    return { error: NextResponse.json({ error: "Доступ только для администратора" }, { status: 403 }) };
+    return { error: apiError("Доступ только для администратора", 403, { code: "FORBIDDEN" }) };
   }
 
   return { session };
 }
+

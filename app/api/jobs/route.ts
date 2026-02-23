@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
+import { assertNotBanned } from "@/lib/access";
 import { getJobPosts } from "@/lib/jobs";
 import { prisma } from "@/lib/prisma";
-import { assertNotBanned } from "@/lib/access";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 import { publishJobByTariff } from "@/lib/tariffs";
 import { jobPostSchema, jobQuerySchema } from "@/lib/validations";
@@ -11,18 +12,26 @@ function mapPublicationError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
   if (message === "NOT_ENOUGH_BALANCE") {
-    return NextResponse.json({ error: "Недостаточно средств на балансе" }, { status: 400 });
+    return apiError("Недостаточно средств на балансе", 400, { code: "NOT_ENOUGH_BALANCE" });
   }
 
   if (message === "TARIFF_NOT_FOUND") {
-    return NextResponse.json({ error: "Тариф не найден или отключен" }, { status: 404 });
+    return apiError("Тариф не найден или отключен", 404, { code: "TARIFF_NOT_FOUND" });
   }
 
   if (message === "USER_BANNED") {
-    return NextResponse.json({ error: "Аккаунт заблокирован. Публикация недоступна" }, { status: 403 });
+    return apiError("Аккаунт заблокирован. Публикация недоступна", 403, { code: "USER_BANNED" });
   }
 
-  throw error;
+  if (message === "FORBIDDEN") {
+    return apiError("Можно публиковать только свои задания", 403, { code: "FORBIDDEN" });
+  }
+
+  if (message === "JOB_NOT_FOUND") {
+    return apiError("Задание не найдено", 404, { code: "JOB_NOT_FOUND" });
+  }
+
+  return apiError("Не удалось опубликовать задание. Повторите попытку.", 500, { code: "PUBLICATION_FAILED" });
 }
 
 export async function GET(req: NextRequest) {
@@ -30,29 +39,36 @@ export async function GET(req: NextRequest) {
   const parsed = jobQuerySchema.safeParse(params);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Некорректные параметры" }, { status: 400 });
+    return apiValidationError(parsed.error, "Некорректные параметры фильтра");
   }
 
   const jobs = await getJobPosts({
     query: parsed.data.query,
     category: parsed.data.category,
     payType: parsed.data.payType,
-    urgent: parsed.data.urgent === "true" ? true : parsed.data.urgent === "false" ? false : undefined
+    urgent: parsed.data.urgent === "true" ? true : parsed.data.urgent === "false" ? false : undefined,
+    limit: parsed.data.limit ?? 24,
+    offset: parsed.data.offset ?? 0
   });
 
-  return NextResponse.json(jobs);
+  return jsonResponse(jobs, { noStore: true });
 }
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user || session.user.role !== "EMPLOYER") {
-    return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+    return apiError("Нет доступа", 403, { code: "FORBIDDEN" });
   }
 
   try {
     await assertNotBanned(session.user.id);
-  } catch {
-    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "USER_BANNED") {
+      return apiError("Аккаунт заблокирован", 403, { code: "USER_BANNED" });
+    }
+
+    return apiError("Пользователь не найден", 404, { code: "USER_NOT_FOUND" });
   }
 
   const rateLimit = await checkRateLimit({
@@ -64,27 +80,24 @@ export async function POST(req: NextRequest) {
   });
 
   if (!rateLimit.ok) {
-    return NextResponse.json(
-      { error: "Слишком много публикаций. Попробуйте чуть позже." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(rateLimit.retryAfterSeconds)
-        }
+    return apiError("Слишком много публикаций. Попробуйте чуть позже.", 429, {
+      code: "RATE_LIMITED",
+      headers: {
+        "Retry-After": String(rateLimit.retryAfterSeconds)
       }
-    );
+    });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const parsed = jobPostSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
   const shouldPublish = parsed.data.status === "ACTIVE";
   if (shouldPublish && !parsed.data.tariffPlanId) {
-    return NextResponse.json({ error: "Выберите тариф перед публикацией" }, { status: 400 });
+    return apiError("Выберите тариф перед публикацией", 400, { code: "TARIFF_REQUIRED" });
   }
 
   const jobPost = await prisma.jobPost.create({
@@ -111,7 +124,7 @@ export async function POST(req: NextRequest) {
         tariffPlanId: parsed.data.tariffPlanId as string
       });
 
-      return NextResponse.json(published, { status: 201 });
+      return jsonResponse(published, { status: 201, noStore: true });
     } catch (error) {
       await prisma.jobPost.update({
         where: { id: jobPost.id },
@@ -121,5 +134,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json(jobPost, { status: 201 });
+  return jsonResponse(jobPost, { status: 201, noStore: true });
 }
+

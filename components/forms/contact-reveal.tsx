@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { StatusAlert } from "@/components/ui/status-alert";
+import { extractApiErrorMessage } from "@/lib/api-response";
 
 type ContactRevealProps = {
   maskedPhone: string;
@@ -43,7 +45,7 @@ export function ContactReveal({ maskedPhone, listingId, jobPostId, hasPhone }: C
     }
 
     const payload = await response.json().catch(() => null);
-    setStatus(payload?.error ?? "Не удалось открыть номер.");
+    setStatus(extractApiErrorMessage(payload, "Не удалось открыть номер."));
   }
 
   return (
@@ -54,7 +56,8 @@ export function ContactReveal({ maskedPhone, listingId, jobPostId, hasPhone }: C
       <Button type="button" variant="outline" size="sm" disabled={!hasPhone || isLoading || Boolean(phone)} onClick={reveal}>
         {phone ? "Номер открыт" : isLoading ? "Открываем..." : "Показать номер"}
       </Button>
-      {status && <p className="text-xs text-muted-foreground">{status}</p>}
+      {status && <StatusAlert message={status} tone="error" className="text-xs" />}
     </div>
   );
 }
+

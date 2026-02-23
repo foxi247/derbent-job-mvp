@@ -119,3 +119,4 @@ export function SearchFilters({ categories }: { categories: string[] }) {
     </form>
   );
 }
+

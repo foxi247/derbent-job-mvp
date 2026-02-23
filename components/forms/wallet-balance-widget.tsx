@@ -3,9 +3,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Loader2, Wallet, X, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { StatusAlert } from "@/components/ui/status-alert";
 
 type TopUpStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 
@@ -67,13 +69,11 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
   const [requisites, setRequisites] = useState<RequisitesDto>(null);
   const [watchRequestId, setWatchRequestId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
 
-  const pendingRequest = useMemo(
-    () => requests.find((request) => request.status === "PENDING") ?? null,
-    [requests]
-  );
+  const pendingRequest = useMemo(() => requests.find((request) => request.status === "PENDING") ?? null, [requests]);
 
   const watchedRequest = useMemo(() => {
     if (!watchRequestId) {
@@ -85,8 +85,7 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
 
   const activeRequest = pendingRequest ?? watchedRequest;
 
-  const remainingMs =
-    activeRequest?.status === "PENDING" ? new Date(activeRequest.expiresAt).getTime() - nowMs : 0;
+  const remainingMs = activeRequest?.status === "PENDING" ? new Date(activeRequest.expiresAt).getTime() - nowMs : 0;
 
   function persistWatchRequest(id: string | null) {
     setWatchRequestId(id);
@@ -115,17 +114,21 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
       setRequests(data.requests ?? []);
       setNowMs(data.serverNow ? new Date(data.serverNow).getTime() : Date.now());
     } catch {
-      // no-op for compact widget
+      // compact widget: silent refresh errors
     }
   }
 
   async function createTopUpRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
+
     setMessage("");
+    setIsError(false);
 
     const numericAmount = Number(amountRub);
     if (!Number.isFinite(numericAmount) || numericAmount < 100) {
       setMessage("Минимальная сумма: 100 ₽");
+      setIsError(true);
       return;
     }
 
@@ -138,11 +141,12 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
     setBusy(false);
 
     const data = (await response.json().catch(() => null)) as
-      | ({ request?: TopUpRequestDto; requisites?: RequisitesDto } & { error?: string })
+      | ({ request?: TopUpRequestDto; requisites?: RequisitesDto; error?: string })
       | null;
 
     if (!response.ok) {
-      setMessage(data?.error ?? "Не удалось создать заявку");
+      setMessage(extractApiErrorMessage(data, "Не удалось создать заявку"));
+      setIsError(true);
       await refreshTopUps();
       return;
     }
@@ -153,16 +157,18 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
 
     setProofText("");
     setMessage("Реквизиты сформированы. Оплатите и нажмите «Я оплатил».");
+    setIsError(false);
     await refreshTopUps();
   }
 
   async function confirmPaid() {
-    if (!activeRequest || activeRequest.status !== "PENDING") {
+    if (!activeRequest || activeRequest.status !== "PENDING" || busy) {
       return;
     }
 
     setBusy(true);
     setMessage("");
+    setIsError(false);
 
     const response = await fetch(`/api/topups/${activeRequest.id}/confirm`, {
       method: "POST",
@@ -174,12 +180,14 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
     const data = (await response.json().catch(() => null)) as { error?: string } | null;
 
     if (!response.ok) {
-      setMessage(data?.error ?? "Не удалось отправить подтверждение");
+      setMessage(extractApiErrorMessage(data, "Не удалось отправить подтверждение"));
+      setIsError(true);
       await refreshTopUps();
       return;
     }
 
     setMessage("Платеж отмечен. Ожидайте подтверждения администратора.");
+    setIsError(false);
     await refreshTopUps();
   }
 
@@ -187,6 +195,7 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
     persistWatchRequest(null);
     setProofText("");
     setMessage("");
+    setIsError(false);
   }
 
   useEffect(() => {
@@ -251,6 +260,7 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
       setOpen(false);
       setMessage("");
       setProofText("");
+      setIsError(false);
       persistWatchRequest(null);
       router.refresh();
     }, 2_000);
@@ -269,11 +279,12 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
         setOpen(nextOpen);
         if (nextOpen) {
           setMessage("");
+          setIsError(false);
         }
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="gap-2 rounded-full px-3">
+        <Button type="button" variant="outline" size="sm" className="h-9 gap-2 rounded-full px-3">
           <Wallet className="h-4 w-4" />
           <span className="text-xs font-semibold tabular-nums sm:text-sm">{formatRub(balanceRub)}</span>
         </Button>
@@ -301,7 +312,7 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
               onChange={(event) => setAmountRub(event.target.value)}
               placeholder="Сумма пополнения, ₽"
             />
-            <Button type="submit" className="w-full" disabled={busy}>
+            <Button type="submit" className="h-11 w-full" disabled={busy}>
               {busy ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -356,7 +367,7 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
                     onChange={(event) => setProofText(event.target.value)}
                     placeholder="Комментарий / номер перевода (необязательно)"
                   />
-                  <Button type="button" className="w-full" onClick={confirmPaid} disabled={busy}>
+                  <Button type="button" className="h-11 w-full" onClick={confirmPaid} disabled={busy}>
                     {busy ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -371,7 +382,7 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
             ) : (
               <div className="space-y-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
                 <p className="font-medium">Время оплаты истекло.</p>
-                <Button type="button" variant="outline" className="w-full" onClick={resetToNewRequest}>
+                <Button type="button" variant="outline" className="h-11 w-full" onClick={resetToNewRequest}>
                   Создать новую заявку
                 </Button>
               </div>
@@ -396,7 +407,7 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
               Пополнение отклонено
             </p>
             {activeRequest.adminNote && <p>Комментарий администратора: {activeRequest.adminNote}</p>}
-            <Button type="button" variant="outline" className="w-full" onClick={resetToNewRequest}>
+            <Button type="button" variant="outline" className="h-11 w-full" onClick={resetToNewRequest}>
               Создать новую заявку
             </Button>
           </div>
@@ -405,14 +416,15 @@ export function WalletBalanceWidget({ initialBalanceRub }: WalletBalanceWidgetPr
         {activeRequest?.status === "EXPIRED" && (
           <div className="space-y-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
             <p className="font-medium">Время оплаты истекло</p>
-            <Button type="button" variant="outline" className="w-full" onClick={resetToNewRequest}>
+            <Button type="button" variant="outline" className="h-11 w-full" onClick={resetToNewRequest}>
               Создать новую заявку
             </Button>
           </div>
         )}
 
-        {message && <p className="mt-3 text-xs text-muted-foreground">{message}</p>}
+        {message && <StatusAlert message={message} tone={isError ? "error" : "info"} className="text-xs" />}
       </DialogContent>
     </Dialog>
   );
 }
+

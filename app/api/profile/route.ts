@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { prisma } from "@/lib/prisma";
 import { profileSchema } from "@/lib/validations";
 
@@ -7,23 +8,23 @@ export async function POST(req: NextRequest) {
   const session = await auth();
 
   if (!session?.user) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+    return apiError("Не авторизован", 401, { code: "UNAUTHORIZED" });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const parsed = profileSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
   if (session.user.role === "EXECUTOR") {
     if (!parsed.data.phone?.trim()) {
-      return NextResponse.json({ error: "Телефон обязателен для исполнителя" }, { status: 400 });
+      return apiError("Телефон обязателен для исполнителя", 400, { code: "PHONE_REQUIRED" });
     }
 
     if (!parsed.data.workCategory?.trim()) {
-      return NextResponse.json({ error: "Укажите категорию, по которой ищете работу" }, { status: 400 });
+      return apiError("Укажите категорию, по которой ищете работу", 400, { code: "CATEGORY_REQUIRED" });
     }
   }
 
@@ -55,5 +56,6 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  return NextResponse.json(profile);
+  return jsonResponse(profile, { noStore: true });
 }
+

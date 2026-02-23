@@ -114,6 +114,10 @@ export default async function ListingPage({ params }: ListingPageProps) {
   const averageRating = reviewStats._avg.rating ? Number(reviewStats._avg.rating).toFixed(1) : null;
   const reviewCount = reviewStats._count.rating;
   const maskedPhone = maskPhone(profile?.phone);
+  const priceText =
+    listing.priceType === "NEGOTIABLE"
+      ? "Договорная"
+      : `${new Intl.NumberFormat("ru-RU").format(Number(listing.priceValue ?? 0))} ₽`;
 
   return (
     <div className="space-y-6">
@@ -137,9 +141,7 @@ export default async function ListingPage({ params }: ListingPageProps) {
           </div>
 
           <div className="text-right">
-            <p className="text-lg font-semibold">
-              {listing.priceType === "NEGOTIABLE" ? "Договорная" : `${listing.priceValue ?? "-"} ₽`}
-            </p>
+            <p className="text-lg font-semibold">{priceText}</p>
             <p className="text-sm text-muted-foreground">{PRICE_TYPE_LABELS[listing.priceType]}</p>
           </div>
         </div>
@@ -182,29 +184,57 @@ export default async function ListingPage({ params }: ListingPageProps) {
       </section>
 
       <section className="surface space-y-3 p-5">
-        <h2 className="text-lg font-semibold">Рейтинг и отзывы</h2>
-        <p className="text-sm text-muted-foreground">
-          {averageRating ? `${averageRating} / 5` : "Пока без оценок"} • отзывов: {reviewCount}
-        </p>
-
-        {reviews.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Пока нет отзывов.</p>
-        ) : (
-          <div className="space-y-2">
-            {reviews.map((review) => (
-              <article key={review.id} className="rounded-xl border bg-background/70 p-3 text-sm">
-                <p className="font-medium">
-                  {review.rating}/5 • {review.employer.name ?? "Работодатель"}
-                </p>
-                {review.text && <p className="mt-1 text-muted-foreground">{review.text}</p>}
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {review.jobPost.title} • {new Date(review.createdAt).toLocaleDateString("ru-RU")}
-                </p>
-              </article>
-            ))}
+        <details className="rounded-lg border bg-background/70 p-3 md:hidden" open>
+          <summary className="cursor-pointer text-lg font-semibold">Отзывы</summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {averageRating ? `${averageRating} / 5` : "Пока без оценок"} • отзывов: {reviewCount}
+            </p>
+            {reviews.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Пока нет отзывов.</p>
+            ) : (
+              <div className="space-y-2">
+                {reviews.map((review) => (
+                  <article key={review.id} className="rounded-xl border bg-background/70 p-3 text-sm">
+                    <p className="font-medium">
+                      {review.rating}/5 • {review.employer.name ?? "Работодатель"}
+                    </p>
+                    {review.text && <p className="mt-1 text-muted-foreground">{review.text}</p>}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {review.jobPost.title} • {new Date(review.createdAt).toLocaleDateString("ru-RU")}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </details>
+
+        <div className="hidden space-y-3 md:block">
+          <h2 className="text-lg font-semibold">Рейтинг и отзывы</h2>
+          <p className="text-sm text-muted-foreground">
+            {averageRating ? `${averageRating} / 5` : "Пока без оценок"} • отзывов: {reviewCount}
+          </p>
+          {reviews.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Пока нет отзывов.</p>
+          ) : (
+            <div className="space-y-2">
+              {reviews.map((review) => (
+                <article key={review.id} className="rounded-xl border bg-background/70 p-3 text-sm">
+                  <p className="font-medium">
+                    {review.rating}/5 • {review.employer.name ?? "Работодатель"}
+                  </p>
+                  {review.text && <p className="mt-1 text-muted-foreground">{review.text}</p>}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {review.jobPost.title} • {new Date(review.createdAt).toLocaleDateString("ru-RU")}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
     </div>
   );
 }
+

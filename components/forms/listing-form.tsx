@@ -2,9 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { StatusAlert } from "@/components/ui/status-alert";
 import { Textarea } from "@/components/ui/textarea";
 
 type PriceType = "PER_SQM" | "PER_HOUR" | "FIXED" | "NEGOTIABLE";
@@ -49,19 +51,24 @@ export function ListingForm({ listing, compact = false, tariffs }: ListingFormPr
   const [status, setStatus] = useState<ListingStatus>(listing?.status ?? "ACTIVE");
   const [tariffPlanId, setTariffPlanId] = useState(tariffs[0]?.id ?? "");
   const [result, setResult] = useState("");
+  const [isError, setIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const selectedTariff = useMemo(() => tariffs.find((item) => item.id === tariffPlanId) ?? null, [tariffs, tariffPlanId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (isSaving) return;
+
     setResult("");
+    setIsError(false);
     setIsSaving(true);
 
     let parsedPrice: number | null = null;
     if (priceType !== "NEGOTIABLE") {
       if (!priceValue.trim()) {
         setResult("Укажите цену или выберите тип «Договорная».");
+        setIsError(true);
         setIsSaving(false);
         return;
       }
@@ -69,6 +76,7 @@ export function ListingForm({ listing, compact = false, tariffs }: ListingFormPr
       const numericPrice = Number(priceValue.replace(",", "."));
       if (!Number.isFinite(numericPrice) || numericPrice < 0) {
         setResult("Цена должна быть числом от 0.");
+        setIsError(true);
         setIsSaving(false);
         return;
       }
@@ -78,6 +86,7 @@ export function ListingForm({ listing, compact = false, tariffs }: ListingFormPr
 
     if (status === "ACTIVE" && !tariffPlanId) {
       setResult("Выберите тариф для публикации.");
+      setIsError(true);
       setIsSaving(false);
       return;
     }
@@ -105,6 +114,7 @@ export function ListingForm({ listing, compact = false, tariffs }: ListingFormPr
     setIsSaving(false);
 
     if (response.ok) {
+      setIsError(false);
       setResult(listing ? "Изменения сохранены" : "Анкета опубликована");
       if (!listing) {
         setTitle("");
@@ -120,7 +130,8 @@ export function ListingForm({ listing, compact = false, tariffs }: ListingFormPr
     }
 
     const data = await response.json().catch(() => null);
-    setResult(data?.error ?? "Ошибка сохранения");
+    setIsError(true);
+    setResult(extractApiErrorMessage(data, "Ошибка сохранения"));
   }
 
   return (
@@ -181,7 +192,8 @@ export function ListingForm({ listing, compact = false, tariffs }: ListingFormPr
         {isSaving ? "Сохраняем..." : listing ? "Сохранить" : "Опубликовать"}
       </Button>
 
-      {result && <p className="text-sm text-muted-foreground">{result}</p>}
+      {result && <StatusAlert message={result} tone={isError ? "error" : "success"} />}
     </form>
   );
 }
+

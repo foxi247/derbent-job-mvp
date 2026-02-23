@@ -1,5 +1,5 @@
-import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { RoleSelector } from "@/components/forms/role-selector";
 
 export default async function RolePage() {
@@ -23,3 +23,4 @@ export default async function RolePage() {
     </div>
   );
 }
+

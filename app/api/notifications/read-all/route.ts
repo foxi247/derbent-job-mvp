@@ -1,13 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import { apiError, jsonResponse } from "@/lib/api-response";
 import { markAllNotificationsRead } from "@/lib/notifications";
 
 export async function POST(_: NextRequest) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+    return apiError("Не авторизован", 401, { code: "UNAUTHORIZED" });
   }
 
   await markAllNotificationsRead(session.user.id);
-  return NextResponse.json({ ok: true });
+  return jsonResponse({ ok: true }, { noStore: true });
 }
+

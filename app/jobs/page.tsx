@@ -1,14 +1,14 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/auth";
+import { SaveSearchMenu } from "@/components/common/save-search-menu";
+import { JobSearchFilters } from "@/components/forms/job-search-filters";
+import { JobCard } from "@/components/jobs/job-card";
+import { Button } from "@/components/ui/button";
+import { CATEGORIES, CITY_LABEL } from "@/lib/constants";
 import { getJobPosts } from "@/lib/jobs";
 import { prisma } from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/site-url";
-import { CATEGORIES, CITY_LABEL } from "@/lib/constants";
-import { SaveSearchMenu } from "@/components/common/save-search-menu";
-import { JobCard } from "@/components/jobs/job-card";
-import { JobSearchFilters } from "@/components/forms/job-search-filters";
-import { Button } from "@/components/ui/button";
 
 type JobsPageProps = {
   searchParams: Record<string, string | string[] | undefined>;
@@ -31,10 +31,20 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   const urgent = searchParams.urgent === "true" ? true : searchParams.urgent === "false" ? false : undefined;
 
   let dbUnavailable = false;
-  let jobs: Awaited<ReturnType<typeof getJobPosts>> = [];
+  let jobs: Awaited<ReturnType<typeof getJobPosts>>["items"] = [];
+  let totalCount = 0;
 
   try {
-    jobs = await getJobPosts({ query, category, payType, urgent });
+    const result = await getJobPosts({
+      query,
+      category,
+      payType,
+      urgent,
+      limit: 90,
+      offset: 0
+    });
+    jobs = result.items;
+    totalCount = result.total;
   } catch (error) {
     dbUnavailable = true;
     console.error("Failed to fetch jobs", error);
@@ -88,12 +98,12 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
 
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-secondary/70 p-3 text-center sm:grid-cols-3 md:grid-cols-2">
             <div>
-              <div className="text-lg font-semibold">{jobs.length}</div>
-              <div className="text-xs text-muted-foreground">Заданий</div>
+              <div className="text-lg font-semibold">{totalCount}</div>
+              <div className="text-xs text-muted-foreground">Заданий в базе</div>
             </div>
             <div>
               <div className="text-lg font-semibold">{CITY_LABEL}</div>
-              <div className="text-xs text-muted-foreground">Город</div>
+              <div className="text-xs text-muted-foreground">Текущий город</div>
             </div>
             <div className="sm:col-span-3 md:col-span-2">
               <div className="text-lg font-semibold">Gold / Premium</div>
@@ -112,7 +122,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
       )}
 
       <section id="jobs-list" className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Лента заданий</h2>
           <div className="flex items-center gap-2">
             {session?.user && <SaveSearchMenu type="JOB" queryParams={saveSearchQuery} />}
@@ -121,7 +131,12 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
         </div>
 
         {jobs.length === 0 ? (
-          <div className="surface p-6 text-sm text-muted-foreground">Заданий по фильтрам пока нет. Попробуйте изменить поиск.</div>
+          <div className="surface space-y-3 p-6 text-sm text-muted-foreground">
+            <p>Заданий по фильтрам пока нет. Попробуйте изменить поиск.</p>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/jobs">Сбросить фильтры</Link>
+            </Button>
+          </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {jobs.map((job) => (
@@ -133,3 +148,4 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
     </div>
   );
 }
+

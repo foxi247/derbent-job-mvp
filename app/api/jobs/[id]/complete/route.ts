@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { apiError, jsonResponse } from "@/lib/api-response";
 import { assertNotBanned } from "@/lib/access";
+import { prisma } from "@/lib/prisma";
 
 type RouteContext = {
   params: {
@@ -12,13 +12,13 @@ type RouteContext = {
 export async function POST(_: Request, context: RouteContext) {
   const session = await auth();
   if (!session?.user || session.user.role !== "EMPLOYER") {
-    return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+    return apiError("Нет доступа", 403, { code: "FORBIDDEN" });
   }
 
   try {
     await assertNotBanned(session.user.id);
   } catch {
-    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+    return apiError("Аккаунт заблокирован", 403, { code: "USER_BANNED" });
   }
 
   const job = await prisma.jobPost.findUnique({
@@ -27,21 +27,29 @@ export async function POST(_: Request, context: RouteContext) {
   });
 
   if (!job) {
-    return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
+    return apiError("Задание не найдено", 404, { code: "NOT_FOUND" });
   }
 
   if (job.userId !== session.user.id) {
-    return NextResponse.json({ error: "Можно завершать только свои задания" }, { status: 403 });
+    return apiError("Можно завершать только свои задания", 403, { code: "FORBIDDEN" });
   }
 
   if (job.status === "COMPLETED") {
-    return NextResponse.json({ ok: true, status: job.status });
+    return jsonResponse({ ok: true, status: job.status }, { noStore: true });
   }
 
-  await prisma.jobPost.update({
-    where: { id: job.id },
-    data: { status: "COMPLETED" }
+  await prisma.$transaction(async (tx) => {
+    await tx.jobPost.update({
+      where: { id: job.id },
+      data: { status: "COMPLETED" }
+    });
+
+    await tx.jobApplication.updateMany({
+      where: { jobPostId: job.id, status: "ACCEPTED" },
+      data: { status: "COMPLETED" }
+    });
   });
 
-  return NextResponse.json({ ok: true, status: "COMPLETED" });
+  return jsonResponse({ ok: true, status: "COMPLETED" }, { noStore: true });
 }
+

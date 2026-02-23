@@ -1,20 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
-import { messageSchema } from "@/lib/validations";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { assertNotBanned } from "@/lib/access";
+import { prisma } from "@/lib/prisma";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
+import { messageSchema } from "@/lib/validations";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "Войдите в аккаунт, чтобы написать сообщение" }, { status: 401 });
+    return apiError("Войдите в аккаунт, чтобы написать сообщение", 401, { code: "UNAUTHORIZED" });
   }
 
   try {
     await assertNotBanned(session.user.id);
   } catch {
-    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+    return apiError("Аккаунт заблокирован", 403, { code: "USER_BANNED" });
   }
 
   const rateLimit = await checkRateLimit({
@@ -26,28 +27,25 @@ export async function POST(req: NextRequest) {
   });
 
   if (!rateLimit.ok) {
-    return NextResponse.json(
-      { error: "Слишком много сообщений. Попробуйте чуть позже." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(rateLimit.retryAfterSeconds)
-        }
+    return apiError("Слишком много сообщений. Попробуйте чуть позже.", 429, {
+      code: "RATE_LIMITED",
+      headers: {
+        "Retry-After": String(rateLimit.retryAfterSeconds)
       }
-    );
+    });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const parsed = messageSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
   if (parsed.data.listingId) {
     const exists = await prisma.listing.findUnique({ where: { id: parsed.data.listingId }, select: { id: true } });
     if (!exists) {
-      return NextResponse.json({ error: "Карточка исполнителя не найдена" }, { status: 404 });
+      return apiError("Карточка исполнителя не найдена", 404, { code: "LISTING_NOT_FOUND" });
     }
   }
 
@@ -57,7 +55,7 @@ export async function POST(req: NextRequest) {
       select: { id: true, userId: true }
     });
     if (!jobPost) {
-      return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
+      return apiError("Задание не найдено", 404, { code: "JOB_NOT_FOUND" });
     }
 
     if (session.user.role === "EXECUTOR") {
@@ -72,10 +70,9 @@ export async function POST(req: NextRequest) {
       });
 
       if (!application || (application.status !== "ACCEPTED" && application.status !== "COMPLETED")) {
-        return NextResponse.json(
-          { error: "Переписка по заданию доступна после принятого отклика." },
-          { status: 403 }
-        );
+        return apiError("Переписка по заданию доступна после принятого отклика.", 403, {
+          code: "APPLICATION_NOT_ACCEPTED"
+        });
       }
     }
   }
@@ -90,5 +87,6 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  return NextResponse.json(message, { status: 201 });
+  return jsonResponse(message, { status: 201, noStore: true });
 }
+

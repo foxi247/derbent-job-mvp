@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
+import { assertNotBanned } from "@/lib/access";
 import { TOP_UP_EXPIRES_MINUTES } from "@/lib/constants";
 import { expireEntities } from "@/lib/lifecycle";
-import { assertNotBanned } from "@/lib/access";
+import { prisma } from "@/lib/prisma";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 import { topUpCreateSchema, topUpQuerySchema } from "@/lib/validations";
 
@@ -14,7 +15,7 @@ function getTopUpExpiryDate() {
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+    return apiError("Не авторизован", 401, { code: "UNAUTHORIZED" });
   }
 
   await expireEntities();
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   const parsed = topUpQuerySchema.safeParse(params);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Некорректные параметры" }, { status: 400 });
+    return apiValidationError(parsed.error, "Некорректные параметры");
   }
 
   const [user, requests, settings] = await Promise.all([
@@ -39,24 +40,27 @@ export async function GET(req: NextRequest) {
     prisma.adminSettings.findFirst({ orderBy: { updatedAt: "desc" } })
   ]);
 
-  return NextResponse.json({
-    balanceRub: user?.balanceRub ?? 0,
-    requisites: settings,
-    requests,
-    serverNow: new Date().toISOString()
-  });
+  return jsonResponse(
+    {
+      balanceRub: user?.balanceRub ?? 0,
+      requisites: settings,
+      requests,
+      serverNow: new Date().toISOString()
+    },
+    { noStore: true }
+  );
 }
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+    return apiError("Не авторизован", 401, { code: "UNAUTHORIZED" });
   }
 
   try {
     await assertNotBanned(session.user.id);
   } catch {
-    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+    return apiError("Аккаунт заблокирован", 403, { code: "USER_BANNED" });
   }
 
   const rateLimit = await checkRateLimit({
@@ -68,22 +72,19 @@ export async function POST(req: NextRequest) {
   });
 
   if (!rateLimit.ok) {
-    return NextResponse.json(
-      { error: "Слишком много заявок на пополнение. Попробуйте чуть позже." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(rateLimit.retryAfterSeconds)
-        }
+    return apiError("Слишком много заявок на пополнение. Попробуйте чуть позже.", 429, {
+      code: "RATE_LIMITED",
+      headers: {
+        "Retry-After": String(rateLimit.retryAfterSeconds)
       }
-    );
+    });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const parsed = topUpCreateSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
   const request = await prisma.topUpRequest.create({
@@ -97,12 +98,13 @@ export async function POST(req: NextRequest) {
 
   const requisites = await prisma.adminSettings.findFirst({ orderBy: { updatedAt: "desc" } });
 
-  return NextResponse.json(
+  return jsonResponse(
     {
       request,
       requisites,
       serverNow: new Date().toISOString()
     },
-    { status: 201 }
+    { status: 201, noStore: true }
   );
 }
+

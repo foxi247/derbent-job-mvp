@@ -1,9 +1,22 @@
-import { Listing, ListingStatus, Prisma, TariffKind } from "@prisma/client";
+import { ListingStatus, Prisma, TariffKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { expireEntities } from "@/lib/lifecycle";
 import { sortByTariffKind } from "@/lib/tariffs";
 
-export type ListingWithProfile = Listing & {
+export type ListingWithProfile = {
+  id: string;
+  userId: string;
+  title: string;
+  category: string;
+  description: string;
+  priceType: "PER_SQM" | "PER_HOUR" | "FIXED" | "NEGOTIABLE";
+  priceValue: Prisma.Decimal | null;
+  district: string | null;
+  city: "DERBENT";
+  status: ListingStatus;
+  expiresAt: Date | null;
+  updatedAt: Date;
+  createdAt: Date;
   activeTariffKind: TariffKind | "BASIC";
   user: {
     name: string | null;
@@ -32,11 +45,18 @@ export type ListingFilters = {
   experienceMin?: number;
   experienceMax?: number;
   priceType?: "PER_SQM" | "PER_HOUR" | "FIXED" | "NEGOTIABLE";
+  limit?: number;
+  offset?: number;
 };
 
-export async function getListings(filters: ListingFilters): Promise<ListingWithProfile[]> {
-  await expireEntities();
+export type ListingSearchResult = {
+  items: ListingWithProfile[];
+  total: number;
+  limit: number;
+  offset: number;
+};
 
+function buildListingsWhere(filters: Omit<ListingFilters, "limit" | "offset">): Prisma.ListingWhereInput {
   const experienceYears: Prisma.IntFilter = {};
   if (typeof filters.experienceMin === "number") {
     experienceYears.gte = filters.experienceMin;
@@ -51,7 +71,7 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
     ...(Object.keys(experienceYears).length > 0 ? { experienceYears } : {})
   };
 
-  const where: Prisma.ListingWhereInput = {
+  return {
     status: ListingStatus.ACTIVE,
     city: "DERBENT",
     expiresAt: { gt: new Date() },
@@ -84,10 +104,28 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
         }
       : {})
   };
+}
 
+export async function getListings(filters: ListingFilters): Promise<ListingSearchResult> {
+  await expireEntities();
+
+  const where = buildListingsWhere(filters);
   const rows = await prisma.listing.findMany({
     where,
-    include: {
+    select: {
+      id: true,
+      userId: true,
+      title: true,
+      category: true,
+      description: true,
+      priceType: true,
+      priceValue: true,
+      district: true,
+      city: true,
+      status: true,
+      expiresAt: true,
+      createdAt: true,
+      updatedAt: true,
       user: {
         select: {
           name: true,
@@ -111,18 +149,41 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
       },
       tariffs: {
         where: { status: "ACTIVE", endsAt: { gt: new Date() } },
-        include: { tariffPlan: { select: { kind: true } } },
+        select: { tariffPlan: { select: { kind: true } } },
         orderBy: { endsAt: "desc" },
         take: 1
       }
-    },
-    orderBy: { updatedAt: "desc" }
+    }
   });
 
   const mapped = rows.map((row) => ({
-    ...row,
-    activeTariffKind: row.tariffs[0]?.tariffPlan.kind ?? "BASIC"
+    id: row.id,
+    userId: row.userId,
+    title: row.title,
+    category: row.category,
+    description: row.description,
+    priceType: row.priceType,
+    priceValue: row.priceValue,
+    district: row.district,
+    city: row.city,
+    status: row.status,
+    expiresAt: row.expiresAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    activeTariffKind: row.tariffs[0]?.tariffPlan.kind ?? "BASIC",
+    user: row.user
   })) as ListingWithProfile[];
 
-  return sortByTariffKind(mapped);
+  const sorted = sortByTariffKind(mapped);
+  const total = sorted.length;
+  const offset = Math.max(0, filters.offset ?? 0);
+  const limit = Math.max(1, filters.limit ?? (total || 1));
+  const items = sorted.slice(offset, offset + limit);
+
+  return {
+    items,
+    total,
+    limit,
+    offset
+  };
 }

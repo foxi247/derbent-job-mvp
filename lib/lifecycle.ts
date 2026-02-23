@@ -1,13 +1,12 @@
-﻿import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export async function expireEntities() {
   const now = new Date();
-  const client = prisma as any;
   const tasks: Promise<unknown>[] = [];
 
-  if (client.topUpRequest?.updateMany) {
+  if (typeof prisma.topUpRequest?.updateMany === "function") {
     tasks.push(
-      client.topUpRequest.updateMany({
+      prisma.topUpRequest.updateMany({
         where: {
           status: "PENDING",
           expiresAt: { lte: now }
@@ -19,9 +18,9 @@ export async function expireEntities() {
     );
   }
 
-  if (client.listingTariff?.updateMany) {
+  if (typeof prisma.listingTariff?.updateMany === "function") {
     tasks.push(
-      client.listingTariff.updateMany({
+      prisma.listingTariff.updateMany({
         where: {
           status: "ACTIVE",
           endsAt: { lte: now }
@@ -33,9 +32,9 @@ export async function expireEntities() {
     );
   }
 
-  if (client.listing?.updateMany) {
+  if (typeof prisma.listing?.updateMany === "function") {
     tasks.push(
-      client.listing.updateMany({
+      prisma.listing.updateMany({
         where: {
           status: "ACTIVE",
           expiresAt: { lte: now }
@@ -47,9 +46,9 @@ export async function expireEntities() {
     );
   }
 
-  if (client.jobPost?.updateMany) {
+  if (typeof prisma.jobPost?.updateMany === "function") {
     tasks.push(
-      client.jobPost.updateMany({
+      prisma.jobPost.updateMany({
         where: {
           status: "ACTIVE",
           expiresAt: { lte: now }
@@ -65,3 +64,4 @@ export async function expireEntities() {
     await Promise.all(tasks);
   }
 }
+

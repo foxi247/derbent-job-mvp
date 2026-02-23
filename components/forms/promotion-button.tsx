@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { StatusAlert } from "@/components/ui/status-alert";
 
 type TariffOption = {
   id: string;
@@ -26,15 +28,20 @@ export function PromotionButton({ endpoint, tariffs, className }: PromotionButto
   const [selectedTariffId, setSelectedTariffId] = useState(defaultTariffId);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
 
   async function promote() {
-    if (!selectedTariffId) {
-      setMessage("Выберите тариф");
+    if (!selectedTariffId || loading) {
+      if (!selectedTariffId) {
+        setMessage("Выберите тариф");
+        setIsError(true);
+      }
       return;
     }
 
     setLoading(true);
     setMessage("");
+    setIsError(false);
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -45,12 +52,14 @@ export function PromotionButton({ endpoint, tariffs, className }: PromotionButto
     setLoading(false);
     if (response.ok) {
       setMessage("Публикация продлена");
+      setIsError(false);
       router.refresh();
       return;
     }
 
     const payload = await response.json().catch(() => null);
-    setMessage(payload?.error ?? "Не удалось продлить размещение");
+    setMessage(extractApiErrorMessage(payload, "Не удалось продлить размещение"));
+    setIsError(true);
   }
 
   return (
@@ -72,7 +81,8 @@ export function PromotionButton({ endpoint, tariffs, className }: PromotionButto
         </Button>
       </div>
 
-      {message && <p className="mt-1 text-xs text-muted-foreground">{message}</p>}
+      {message && <StatusAlert message={message} tone={isError ? "error" : "success"} className="mt-2 text-xs" />}
     </div>
   );
 }
+

@@ -99,14 +99,18 @@ export const listingQuerySchema = z.object({
   urgent: z.enum(["true", "false"]).optional(),
   experienceMin: z.coerce.number().optional(),
   experienceMax: z.coerce.number().optional(),
-  priceType: z.enum(["PER_SQM", "PER_HOUR", "FIXED", "NEGOTIABLE"]).optional()
+  priceType: z.enum(["PER_SQM", "PER_HOUR", "FIXED", "NEGOTIABLE"]).optional(),
+  limit: z.coerce.number().int().min(1).max(60).optional(),
+  offset: z.coerce.number().int().min(0).max(20_000).optional()
 });
 
 export const jobQuerySchema = z.object({
   query: z.string().optional(),
   category: z.string().optional(),
   payType: z.enum(["PER_HOUR", "FIXED", "NEGOTIABLE"]).optional(),
-  urgent: z.enum(["true", "false"]).optional()
+  urgent: z.enum(["true", "false"]).optional(),
+  limit: z.coerce.number().int().min(1).max(60).optional(),
+  offset: z.coerce.number().int().min(0).max(20_000).optional()
 });
 
 export const topUpCreateSchema = z.object({
@@ -209,7 +213,16 @@ export const savedSearchCreateSchema = z.object({
 });
 
 export const notificationQuerySchema = z.object({
-  unreadOnly: z.enum(["true", "false"]).optional()
+  unreadOnly: z.enum(["true", "false"]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).max(20_000).optional()
+});
+
+export const reviewQuerySchema = z.object({
+  executorUserId: z.string().cuid().optional(),
+  jobPostId: z.string().cuid().optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+  offset: z.coerce.number().int().min(0).max(20_000).optional()
 });
 
 export const reportCreateSchema = z

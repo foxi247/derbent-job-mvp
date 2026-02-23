@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { MarkAllReadButton } from "@/components/forms/mark-all-read-button";
@@ -29,7 +28,7 @@ export default async function NotificationsPage() {
     prisma.notification.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
-      take: 120
+      take: 80
     }),
     prisma.notification.count({
       where: {
@@ -42,7 +41,7 @@ export default async function NotificationsPage() {
   return (
     <div className="space-y-6">
       <section className="surface p-5">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Уведомления</h1>
             <p className="mt-1 text-sm text-muted-foreground">Непрочитанных: {unreadCount}</p>
@@ -67,9 +66,9 @@ export default async function NotificationsPage() {
               </div>
               {item.link && (
                 <div className="mt-2">
-                  <Link href={item.link} className="text-xs font-medium text-primary hover:underline">
+                  <a href={item.link} className="text-xs font-medium text-primary hover:underline">
                     Перейти
-                  </Link>
+                  </a>
                 </div>
               )}
             </article>

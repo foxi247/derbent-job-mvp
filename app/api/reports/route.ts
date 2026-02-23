@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/auth";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { assertNotBanned } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
@@ -8,13 +9,13 @@ import { reportCreateSchema } from "@/lib/validations";
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+    return apiError("Не авторизован", 401, { code: "UNAUTHORIZED" });
   }
 
   try {
     await assertNotBanned(session.user.id);
   } catch {
-    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+    return apiError("Аккаунт заблокирован", 403, { code: "USER_BANNED" });
   }
 
   const rateLimit = await checkRateLimit({
@@ -26,21 +27,18 @@ export async function POST(req: NextRequest) {
   });
 
   if (!rateLimit.ok) {
-    return NextResponse.json(
-      { error: "Слишком много жалоб. Попробуйте позже." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(rateLimit.retryAfterSeconds)
-        }
+    return apiError("Слишком много жалоб. Попробуйте позже.", 429, {
+      code: "RATE_LIMITED",
+      headers: {
+        "Retry-After": String(rateLimit.retryAfterSeconds)
       }
-    );
+    });
   }
 
   const body = await req.json().catch(() => ({}));
   const parsed = reportCreateSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
 
   if (parsed.data.targetType === "LISTING") {
@@ -50,11 +48,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (!listing) {
-      return NextResponse.json({ error: "Анкета не найдена" }, { status: 404 });
+      return apiError("Анкета не найдена", 404, { code: "LISTING_NOT_FOUND" });
     }
 
     if (listing.userId === session.user.id) {
-      return NextResponse.json({ error: "Нельзя пожаловаться на свою анкету" }, { status: 400 });
+      return apiError("Нельзя пожаловаться на свою анкету", 400, { code: "INVALID_TARGET" });
     }
   }
 
@@ -65,11 +63,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (!jobPost) {
-      return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
+      return apiError("Задание не найдено", 404, { code: "JOB_NOT_FOUND" });
     }
 
     if (jobPost.userId === session.user.id) {
-      return NextResponse.json({ error: "Нельзя пожаловаться на свое задание" }, { status: 400 });
+      return apiError("Нельзя пожаловаться на свое задание", 400, { code: "INVALID_TARGET" });
     }
   }
 
@@ -80,11 +78,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (!targetUser) {
-      return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+      return apiError("Пользователь не найден", 404, { code: "USER_NOT_FOUND" });
     }
 
     if (targetUser.id === session.user.id) {
-      return NextResponse.json({ error: "Нельзя пожаловаться на себя" }, { status: 400 });
+      return apiError("Нельзя пожаловаться на себя", 400, { code: "INVALID_TARGET" });
     }
   }
 
@@ -100,5 +98,6 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  return NextResponse.json(report, { status: 201 });
+  return jsonResponse(report, { status: 201, noStore: true });
 }
+

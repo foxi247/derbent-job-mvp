@@ -38,13 +38,13 @@ export const TARIFF_KIND_LABELS = {
 export const TARIFF_KIND_BADGE_STYLES = {
   BASIC: "bg-slate-100 text-slate-700",
   PREMIUM: "bg-amber-100 text-amber-800",
-  GOLD: "bg-yellow-200 text-yellow-900"
+  GOLD: "bg-yellow-100 text-yellow-900"
 } as const;
 
 export const TARIFF_KIND_CARD_STYLES = {
   BASIC: "border-border",
-  PREMIUM: "border-amber-300 bg-amber-50/30",
-  GOLD: "border-yellow-400 bg-yellow-50/40"
+  PREMIUM: "border-amber-200 bg-amber-50/25",
+  GOLD: "border-yellow-300 bg-yellow-50/30"
 } as const;
 
 export const TARIFF_KIND_SORT_PRIORITY = {
@@ -59,3 +59,4 @@ export const EXPERIENCE_RANGES = [
   { label: "3-5", min: 3, max: 5 },
   { label: "5+", min: 5, max: 100 }
 ] as const;
+

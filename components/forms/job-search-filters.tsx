@@ -39,12 +39,7 @@ export function JobSearchFilters({ categories }: { categories: string[] }) {
   return (
     <form onSubmit={apply} className="surface space-y-3 p-4">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Поиск по заданию"
-          className="lg:col-span-2"
-        />
+        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по заданию" className="lg:col-span-2" />
 
         <Select value={category} onChange={(event) => setCategory(event.target.value)}>
           <option value="">Категория</option>
@@ -87,3 +82,4 @@ export function JobSearchFilters({ categories }: { categories: string[] }) {
     </form>
   );
 }
+

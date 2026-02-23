@@ -1,5 +1,6 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
+import { apiError, apiValidationError, jsonResponse } from "@/lib/api-response";
 import { createNotificationSafe } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { topUpAdminActionSchema } from "@/lib/validations";
@@ -14,27 +15,55 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
   const parsed = topUpAdminActionSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiValidationError(parsed.error);
   }
+
+  const now = new Date();
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const request = await tx.topUpRequest.findUnique({ where: { id: context.params.id } });
+      const request = await tx.topUpRequest.findUnique({
+        where: { id: context.params.id },
+        select: {
+          id: true,
+          userId: true,
+          amountRub: true,
+          status: true,
+          expiresAt: true
+        }
+      });
 
       if (!request) {
         throw new Error("TOPUP_NOT_FOUND");
       }
 
       if (request.status !== "PENDING") {
-        throw new Error("TOPUP_NOT_PENDING");
+        throw new Error("TOPUP_ALREADY_PROCESSED");
       }
 
-      if (request.expiresAt <= new Date()) {
-        await tx.topUpRequest.update({
-          where: { id: request.id },
+      if (request.expiresAt <= now) {
+        await tx.topUpRequest.updateMany({
+          where: { id: request.id, status: "PENDING" },
           data: { status: "EXPIRED" }
         });
         throw new Error("TOPUP_EXPIRED");
+      }
+
+      const updatedCount = await tx.topUpRequest.updateMany({
+        where: {
+          id: request.id,
+          status: "PENDING",
+          expiresAt: { gt: now }
+        },
+        data: {
+          status: "APPROVED",
+          approverUserId: authResult.session.user.id,
+          adminNote: parsed.data.adminNote ?? null
+        }
+      });
+
+      if (updatedCount.count !== 1) {
+        throw new Error("TOPUP_ALREADY_PROCESSED");
       }
 
       await tx.user.update({
@@ -44,14 +73,15 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
         }
       });
 
-      return tx.topUpRequest.update({
-        where: { id: request.id },
-        data: {
-          status: "APPROVED",
-          approverUserId: authResult.session.user.id,
-          adminNote: parsed.data.adminNote ?? null
-        }
+      const updated = await tx.topUpRequest.findUnique({
+        where: { id: request.id }
       });
+
+      if (!updated) {
+        throw new Error("TOPUP_NOT_FOUND");
+      }
+
+      return updated;
     });
 
     await createNotificationSafe({
@@ -62,22 +92,23 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
       link: "/profile"
     });
 
-    return NextResponse.json(result);
+    return jsonResponse(result, { noStore: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
 
     if (message === "TOPUP_NOT_FOUND") {
-      return NextResponse.json({ error: "Заявка не найдена" }, { status: 404 });
+      return apiError("Заявка не найдена", 404, { code: "TOPUP_NOT_FOUND" });
     }
 
-    if (message === "TOPUP_NOT_PENDING") {
-      return NextResponse.json({ error: "Можно подтверждать только заявки в ожидании" }, { status: 400 });
+    if (message === "TOPUP_ALREADY_PROCESSED") {
+      return apiError("Заявка уже обработана", 409, { code: "TOPUP_ALREADY_PROCESSED" });
     }
 
     if (message === "TOPUP_EXPIRED") {
-      return NextResponse.json({ error: "Срок заявки истек" }, { status: 400 });
+      return apiError("Срок заявки истек", 400, { code: "TOPUP_EXPIRED" });
     }
 
-    throw error;
+    return apiError("Не удалось подтвердить пополнение", 500, { code: "TOPUP_APPROVE_FAILED" });
   }
 }
+

@@ -104,6 +104,10 @@ export default async function JobPage({ params }: JobPageProps) {
   const maskedPhone = maskPhone(ownerPhone);
   const isExecutor = session?.user?.role === "EXECUTOR";
   const hasAcceptedApplication = application?.status === "ACCEPTED" || application?.status === "COMPLETED";
+  const payText =
+    job.payType === "NEGOTIABLE"
+      ? "Договорная"
+      : `${new Intl.NumberFormat("ru-RU").format(Number(job.payValue ?? 0))} ₽`;
 
   return (
     <div className="space-y-6">
@@ -127,7 +131,7 @@ export default async function JobPage({ params }: JobPageProps) {
           </div>
 
           <div className="text-right">
-            <p className="text-lg font-semibold">{job.payType === "NEGOTIABLE" ? "Договорная" : `${job.payValue ?? "-"} ₽`}</p>
+            <p className="text-lg font-semibold">{payText}</p>
             <p className="text-sm text-muted-foreground">{PAY_TYPE_LABELS[job.payType]}</p>
           </div>
         </div>
@@ -151,7 +155,7 @@ export default async function JobPage({ params }: JobPageProps) {
           <h2 className="text-lg font-semibold">Отклик</h2>
 
           {!session?.user && (
-            <Button asChild className="w-full">
+            <Button asChild className="h-11 w-full">
               <Link href="/auth/signin">Войти и откликнуться</Link>
             </Button>
           )}
@@ -162,13 +166,11 @@ export default async function JobPage({ params }: JobPageProps) {
             <p className="text-sm text-muted-foreground">Переписка откроется после принятия отклика работодателем.</p>
           )}
 
-          {session?.user && isExecutor && hasAcceptedApplication && (
-            <MessageForm jobPostId={job.id} title="Написать работодателю" />
-          )}
+          {session?.user && isExecutor && hasAcceptedApplication && <MessageForm jobPostId={job.id} title="Написать работодателю" />}
 
           {session?.user && !isExecutor && (
             <p className="text-sm text-muted-foreground">
-              Отклик доступен только исполнителям. Управление заданиями в кабинете работодателя.
+              Отклик доступен только исполнителям. Управление заданиями находится в кабинете работодателя.
             </p>
           )}
         </article>
@@ -176,3 +178,4 @@ export default async function JobPage({ params }: JobPageProps) {
     </div>
   );
 }
+

@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
-import { ensureExpiringPublicationNotifications } from "@/lib/notifications";
 import { ApplicationStatusActions } from "@/components/forms/application-status-actions";
+import { CompleteJobButton } from "@/components/forms/complete-job-button";
 import { JobForm } from "@/components/forms/job-form";
 import { PromotionButton } from "@/components/forms/promotion-button";
-import { CompleteJobButton } from "@/components/forms/complete-job-button";
 import { ReviewForm } from "@/components/forms/review-form";
+import { ensureExpiringPublicationNotifications } from "@/lib/notifications";
+import { prisma } from "@/lib/prisma";
 
 const applicationStatusLabel: Record<string, string> = {
   SENT: "Отправлен",
@@ -164,15 +164,13 @@ export default async function EmployerDashboardPage() {
                   Срок размещения: {jobPost.expiresAt ? new Date(jobPost.expiresAt).toLocaleDateString("ru-RU") : "не задан"}
                 </p>
 
-                {jobPost.status !== "COMPLETED" && <PromotionButton endpoint={`/api/jobs/${jobPost.id}/promote`} tariffs={tariffs} />}
-
-                <div className="flex flex-wrap gap-2">
-                  {jobPost.status !== "COMPLETED" && <CompleteJobButton jobPostId={jobPost.id} />}
-                </div>
-
                 <details className="rounded-lg border bg-background/70 p-3 text-sm">
-                  <summary className="cursor-pointer font-medium">Редактировать задание</summary>
-                  <div className="mt-3">
+                  <summary className="cursor-pointer font-medium">... Действия</summary>
+                  <div className="mt-3 space-y-3">
+                    {jobPost.status !== "COMPLETED" && (
+                      <PromotionButton endpoint={`/api/jobs/${jobPost.id}/promote`} tariffs={tariffs} />
+                    )}
+
                     <JobForm
                       jobPost={{
                         id: jobPost.id,
@@ -189,6 +187,8 @@ export default async function EmployerDashboardPage() {
                       tariffs={tariffs}
                       compact
                     />
+
+                    {jobPost.status !== "COMPLETED" && <CompleteJobButton jobPostId={jobPost.id} />}
                   </div>
                 </details>
 
@@ -221,3 +221,4 @@ export default async function EmployerDashboardPage() {
     </div>
   );
 }
+

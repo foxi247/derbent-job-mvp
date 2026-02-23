@@ -1,9 +1,24 @@
-import { JobPost, JobPostStatus, Prisma, TariffKind } from "@prisma/client";
+import { JobPostStatus, Prisma, TariffKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { expireEntities } from "@/lib/lifecycle";
 import { sortByTariffKind } from "@/lib/tariffs";
 
-export type JobPostWithOwner = JobPost & {
+export type JobPostWithOwner = {
+  id: string;
+  userId: string;
+  title: string;
+  category: string;
+  description: string;
+  payType: "PER_HOUR" | "FIXED" | "NEGOTIABLE";
+  payValue: Prisma.Decimal | null;
+  district: string | null;
+  phone: string | null;
+  urgentToday: boolean;
+  status: JobPostStatus;
+  city: "DERBENT";
+  expiresAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
   activeTariffKind: TariffKind | "BASIC";
   user: {
     name: string | null;
@@ -19,12 +34,19 @@ export type JobPostFilters = {
   category?: string;
   payType?: "PER_HOUR" | "FIXED" | "NEGOTIABLE";
   urgent?: boolean;
+  limit?: number;
+  offset?: number;
 };
 
-export async function getJobPosts(filters: JobPostFilters): Promise<JobPostWithOwner[]> {
-  await expireEntities();
+export type JobSearchResult = {
+  items: JobPostWithOwner[];
+  total: number;
+  limit: number;
+  offset: number;
+};
 
-  const where: Prisma.JobPostWhereInput = {
+function buildJobsWhere(filters: Omit<JobPostFilters, "limit" | "offset">): Prisma.JobPostWhereInput {
+  return {
     status: JobPostStatus.ACTIVE,
     city: "DERBENT",
     expiresAt: { gt: new Date() },
@@ -46,10 +68,29 @@ export async function getJobPosts(filters: JobPostFilters): Promise<JobPostWithO
         }
       : {})
   };
+}
+
+export async function getJobPosts(filters: JobPostFilters): Promise<JobSearchResult> {
+  await expireEntities();
 
   const rows = await prisma.jobPost.findMany({
-    where,
-    include: {
+    where: buildJobsWhere(filters),
+    select: {
+      id: true,
+      userId: true,
+      title: true,
+      category: true,
+      description: true,
+      payType: true,
+      payValue: true,
+      district: true,
+      phone: true,
+      urgentToday: true,
+      status: true,
+      city: true,
+      expiresAt: true,
+      createdAt: true,
+      updatedAt: true,
       user: {
         select: {
           name: true,
@@ -63,18 +104,43 @@ export async function getJobPosts(filters: JobPostFilters): Promise<JobPostWithO
       },
       tariffs: {
         where: { status: "ACTIVE", endsAt: { gt: new Date() } },
-        include: { tariffPlan: { select: { kind: true } } },
+        select: { tariffPlan: { select: { kind: true } } },
         orderBy: { endsAt: "desc" },
         take: 1
       }
-    },
-    orderBy: { updatedAt: "desc" }
+    }
   });
 
   const mapped = rows.map((row) => ({
-    ...row,
-    activeTariffKind: row.tariffs[0]?.tariffPlan.kind ?? "BASIC"
+    id: row.id,
+    userId: row.userId,
+    title: row.title,
+    category: row.category,
+    description: row.description,
+    payType: row.payType,
+    payValue: row.payValue,
+    district: row.district,
+    phone: row.phone,
+    urgentToday: row.urgentToday,
+    status: row.status,
+    city: row.city,
+    expiresAt: row.expiresAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    activeTariffKind: row.tariffs[0]?.tariffPlan.kind ?? "BASIC",
+    user: row.user
   })) as JobPostWithOwner[];
 
-  return sortByTariffKind(mapped);
+  const sorted = sortByTariffKind(mapped);
+  const total = sorted.length;
+  const offset = Math.max(0, filters.offset ?? 0);
+  const limit = Math.max(1, filters.limit ?? (total || 1));
+  const items = sorted.slice(offset, offset + limit);
+
+  return {
+    items,
+    total,
+    limit,
+    offset
+  };
 }

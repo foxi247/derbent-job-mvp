@@ -26,3 +26,4 @@ export function NotificationsBell({ unreadCount, className }: NotificationsBellP
     </Link>
   );
 }
+

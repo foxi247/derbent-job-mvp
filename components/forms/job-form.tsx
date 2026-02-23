@@ -2,9 +2,11 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { StatusAlert } from "@/components/ui/status-alert";
 import { Textarea } from "@/components/ui/textarea";
 
 type PayType = "PER_HOUR" | "FIXED" | "NEGOTIABLE";
@@ -53,19 +55,24 @@ export function JobForm({ jobPost, compact = false, tariffs }: JobFormProps) {
   const [status, setStatus] = useState<JobPostStatus>(jobPost?.status ?? "ACTIVE");
   const [tariffPlanId, setTariffPlanId] = useState(tariffs[0]?.id ?? "");
   const [result, setResult] = useState("");
+  const [isError, setIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const selectedTariff = useMemo(() => tariffs.find((item) => item.id === tariffPlanId) ?? null, [tariffs, tariffPlanId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (isSaving) return;
+
     setResult("");
+    setIsError(false);
     setIsSaving(true);
 
     let parsedPay: number | null = null;
     if (payType !== "NEGOTIABLE") {
       if (!payValue.trim()) {
         setResult("Укажите оплату или выберите «Договорная».");
+        setIsError(true);
         setIsSaving(false);
         return;
       }
@@ -73,6 +80,7 @@ export function JobForm({ jobPost, compact = false, tariffs }: JobFormProps) {
       const numericPay = Number(payValue.replace(",", "."));
       if (!Number.isFinite(numericPay) || numericPay < 0) {
         setResult("Оплата должна быть числом от 0.");
+        setIsError(true);
         setIsSaving(false);
         return;
       }
@@ -82,6 +90,7 @@ export function JobForm({ jobPost, compact = false, tariffs }: JobFormProps) {
 
     if (status === "ACTIVE" && !tariffPlanId) {
       setResult("Выберите тариф для публикации.");
+      setIsError(true);
       setIsSaving(false);
       return;
     }
@@ -110,6 +119,7 @@ export function JobForm({ jobPost, compact = false, tariffs }: JobFormProps) {
 
     setIsSaving(false);
     if (response.ok) {
+      setIsError(false);
       setResult(jobPost ? "Изменения сохранены" : "Задание опубликовано");
       if (!jobPost) {
         setTitle("");
@@ -127,7 +137,8 @@ export function JobForm({ jobPost, compact = false, tariffs }: JobFormProps) {
     }
 
     const data = await response.json().catch(() => null);
-    setResult(data?.error ?? "Ошибка сохранения");
+    setIsError(true);
+    setResult(extractApiErrorMessage(data, "Ошибка сохранения"));
   }
 
   return (
@@ -199,7 +210,8 @@ export function JobForm({ jobPost, compact = false, tariffs }: JobFormProps) {
       <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
         {isSaving ? "Сохраняем..." : jobPost ? "Сохранить" : "Опубликовать"}
       </Button>
-      {result && <p className="text-sm text-muted-foreground">{result}</p>}
+      {result && <StatusAlert message={result} tone={isError ? "error" : "success"} />}
     </form>
   );
 }
+

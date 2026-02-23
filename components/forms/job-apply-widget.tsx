@@ -4,7 +4,9 @@ import { FormEvent, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { StatusAlert } from "@/components/ui/status-alert";
 import { Textarea } from "@/components/ui/textarea";
+import { extractApiErrorMessage } from "@/lib/api-response";
 
 type ApplicationStatus = "SENT" | "VIEWED" | "ACCEPTED" | "REJECTED" | "COMPLETED" | "CANCELED";
 
@@ -33,6 +35,7 @@ export function JobApplyWidget({ jobPostId, initialApplication }: JobApplyWidget
   const [message, setMessage] = useState(initialApplication?.message ?? "");
   const [application, setApplication] = useState<Application | null>(initialApplication);
   const [result, setResult] = useState("");
+  const [isError, setIsError] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function submit(event: FormEvent) {
@@ -41,6 +44,7 @@ export function JobApplyWidget({ jobPostId, initialApplication }: JobApplyWidget
 
     setLoading(true);
     setResult("");
+    setIsError(false);
 
     const response = await fetch(`/api/jobs/${jobPostId}/apply`, {
       method: "POST",
@@ -52,7 +56,8 @@ export function JobApplyWidget({ jobPostId, initialApplication }: JobApplyWidget
 
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      setResult(payload?.error ?? "Не удалось отправить отклик");
+      setIsError(true);
+      setResult(extractApiErrorMessage(payload, "Не удалось отправить отклик"));
       return;
     }
 
@@ -67,7 +72,7 @@ export function JobApplyWidget({ jobPostId, initialApplication }: JobApplyWidget
         <Button type="button" className="w-full sm:w-auto" disabled>
           Статус: {STATUS_LABELS[application.status]}
         </Button>
-        {result && <p className="text-xs text-muted-foreground">{result}</p>}
+        {result && <StatusAlert message={result} tone={isError ? "error" : "success"} className="text-xs" />}
       </div>
     );
   }
@@ -108,8 +113,9 @@ export function JobApplyWidget({ jobPostId, initialApplication }: JobApplyWidget
           </Button>
         </form>
 
-        {result && <p className="text-xs text-muted-foreground">{result}</p>}
+        {result && <StatusAlert message={result} tone={isError ? "error" : "success"} className="text-xs" />}
       </DialogContent>
     </Dialog>
   );
 }
+
