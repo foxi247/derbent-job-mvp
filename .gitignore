@@ -12,6 +12,7 @@ dist
 *.log
 dev.out.log
 dev.err.log
+tsconfig.tsbuildinfo
 
 .DS_Store
 Thumbs.db

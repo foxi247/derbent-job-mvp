@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -9,6 +9,15 @@ import { Textarea } from "@/components/ui/textarea";
 
 type PriceType = "PER_SQM" | "PER_HOUR" | "FIXED" | "NEGOTIABLE";
 type ListingStatus = "ACTIVE" | "PAUSED";
+
+type TariffOption = {
+  id: string;
+  name: string;
+  durationDays: number;
+  kind: "BASIC" | "PREMIUM" | "GOLD";
+  priceRub: number;
+  discountPercent: number;
+};
 
 type ListingFormProps = {
   listing?: {
@@ -22,12 +31,15 @@ type ListingFormProps = {
     status: ListingStatus;
   };
   compact?: boolean;
-  initialExperienceYears?: number;
+  tariffs: TariffOption[];
 };
 
-const EXPERIENCE_PRESETS = [0, 1, 2, 3, 5, 7, 10];
+function calculateEffectivePrice(priceRub: number, discountPercent: number) {
+  return Math.max(0, Math.floor((priceRub * (100 - discountPercent)) / 100));
+}
 
-export function ListingForm({ listing, compact = false, initialExperienceYears = 0 }: ListingFormProps) {
+export function ListingForm({ listing, compact = false, tariffs }: ListingFormProps) {
+  const router = useRouter();
   const [title, setTitle] = useState(listing?.title ?? "");
   const [category, setCategory] = useState(listing?.category ?? "");
   const [description, setDescription] = useState(listing?.description ?? "");
@@ -35,15 +47,11 @@ export function ListingForm({ listing, compact = false, initialExperienceYears =
   const [priceValue, setPriceValue] = useState(listing?.priceValue != null ? String(listing.priceValue) : "");
   const [district, setDistrict] = useState(listing?.district ?? "");
   const [status, setStatus] = useState<ListingStatus>(listing?.status ?? "ACTIVE");
-  const [experienceYears, setExperienceYears] = useState(String(initialExperienceYears));
+  const [tariffPlanId, setTariffPlanId] = useState(tariffs[0]?.id ?? "");
   const [result, setResult] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const normalizedExperienceYears = useMemo(() => {
-    const value = Number(experienceYears);
-    if (!Number.isFinite(value) || value < 0) return 0;
-    return Math.min(60, Math.trunc(value));
-  }, [experienceYears]);
+  const selectedTariff = useMemo(() => tariffs.find((item) => item.id === tariffPlanId) ?? null, [tariffs, tariffPlanId]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -68,18 +76,10 @@ export function ListingForm({ listing, compact = false, initialExperienceYears =
       parsedPrice = numericPrice;
     }
 
-    if (!compact) {
-      const profileResult = await fetch("/api/profile/experience", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ experienceYears: normalizedExperienceYears })
-      });
-
-      if (!profileResult.ok) {
-        setResult("Не удалось сохранить стаж исполнителя.");
-        setIsSaving(false);
-        return;
-      }
+    if (status === "ACTIVE" && !tariffPlanId) {
+      setResult("Выберите тариф для публикации.");
+      setIsSaving(false);
+      return;
     }
 
     const payload = {
@@ -89,7 +89,8 @@ export function ListingForm({ listing, compact = false, initialExperienceYears =
       priceType,
       priceValue: parsedPrice,
       district: district || null,
-      status
+      status,
+      tariffPlanId: status === "ACTIVE" ? tariffPlanId : null
     };
 
     const endpoint = listing ? `/api/listings/${listing.id}` : "/api/listings";
@@ -101,8 +102,10 @@ export function ListingForm({ listing, compact = false, initialExperienceYears =
       body: JSON.stringify(payload)
     });
 
+    setIsSaving(false);
+
     if (response.ok) {
-      setResult(listing ? "Изменения сохранены" : "Объявление создано");
+      setResult(listing ? "Изменения сохранены" : "Анкета опубликована");
       if (!listing) {
         setTitle("");
         setCategory("");
@@ -110,56 +113,28 @@ export function ListingForm({ listing, compact = false, initialExperienceYears =
         setPriceType("NEGOTIABLE");
         setPriceValue("");
         setDistrict("");
+        setStatus("ACTIVE");
       }
-    } else {
-      setResult("Ошибка сохранения");
+      router.refresh();
+      return;
     }
 
-    setIsSaving(false);
+    const data = await response.json().catch(() => null);
+    setResult(data?.error ?? "Ошибка сохранения");
   }
 
   return (
-    <form onSubmit={onSubmit} className="surface space-y-3 p-4">
+    <form onSubmit={onSubmit} className="surface space-y-3 p-4 md:p-5">
       {!compact && (
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold">Объявление исполнителя</h2>
-          <p className="text-xs text-muted-foreground">
-            Профиль, навыки и доступность можно детально настроить в{" "}
-            <Link href="/profile" className="underline">
-              профиле
-            </Link>
-            .
-          </p>
+          <h2 className="text-lg font-semibold">Анкета исполнителя</h2>
+          <p className="text-sm text-muted-foreground">Заполните данные и опубликуйте анкету по выбранному тарифу.</p>
         </div>
       )}
 
-      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Например: Курьер по Дербенту" required />
+      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Кем хотите работать" required />
       <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Категория" required />
-      <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Кратко опишите опыт и что делаете" required />
-
-      {!compact && (
-        <div className="grid gap-2 md:grid-cols-2">
-          <Select value={experienceYears} onChange={(e) => setExperienceYears(e.target.value)}>
-            <option value="0">Стаж: 0 лет</option>
-            {EXPERIENCE_PRESETS.filter((v) => v > 0).map((v) => (
-              <option key={v} value={String(v)}>
-                Стаж: {v} {v === 1 ? "год" : v < 5 ? "года" : "лет"}
-              </option>
-            ))}
-            {normalizedExperienceYears > 10 && <option value={String(normalizedExperienceYears)}>Стаж: {normalizedExperienceYears} лет</option>}
-          </Select>
-
-          <Input
-            type="number"
-            min={0}
-            max={60}
-            value={experienceYears}
-            onChange={(e) => setExperienceYears(e.target.value)}
-            placeholder="Или введите стаж вручную"
-            required
-          />
-        </div>
-      )}
+      <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Кратко о себе" required />
 
       <div className="grid gap-2 md:grid-cols-3">
         <Select value={priceType} onChange={(e) => setPriceType(e.target.value as PriceType)}>
@@ -168,18 +143,44 @@ export function ListingForm({ listing, compact = false, initialExperienceYears =
           <option value="FIXED">Фикс</option>
           <option value="NEGOTIABLE">Договорная</option>
         </Select>
-        <Input value={priceValue} onChange={(e) => setPriceValue(e.target.value)} placeholder="Цена (если не договорная)" />
+
+        <Input value={priceValue} onChange={(e) => setPriceValue(e.target.value)} placeholder="Цена" />
         <Input value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="Район (опционально)" />
       </div>
 
-      <Select value={status} onChange={(e) => setStatus(e.target.value as ListingStatus)}>
-        <option value="ACTIVE">Активно</option>
-        <option value="PAUSED">На паузе</option>
-      </Select>
+      <div className="space-y-2 rounded-xl border bg-background/70 p-3">
+        <p className="text-sm font-medium">Тариф публикации</p>
+        <Select value={tariffPlanId} onChange={(event) => setTariffPlanId(event.target.value)}>
+          {tariffs.map((tariff) => {
+            const effectivePrice = calculateEffectivePrice(tariff.priceRub, tariff.discountPercent);
+            return (
+              <option key={tariff.id} value={tariff.id}>
+                {tariff.name} ({effectivePrice} ₽ / {tariff.durationDays} дн.)
+              </option>
+            );
+          })}
+        </Select>
+        {selectedTariff && (
+          <p className="text-xs text-muted-foreground">
+            Будет списано: {calculateEffectivePrice(selectedTariff.priceRub, selectedTariff.discountPercent)} ₽
+          </p>
+        )}
+      </div>
 
-      <Button type="submit" disabled={isSaving}>
-        {isSaving ? "Сохраняем..." : listing ? "Обновить" : "Создать"}
+      <details className="rounded-lg border bg-background/70 p-3 text-sm">
+        <summary className="cursor-pointer font-medium">Дополнительно</summary>
+        <div className="mt-3 space-y-2">
+          <Select value={status} onChange={(event) => setStatus(event.target.value as ListingStatus)}>
+            <option value="ACTIVE">Опубликовать сейчас</option>
+            <option value="PAUSED">Сохранить как черновик</option>
+          </Select>
+        </div>
+      </details>
+
+      <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
+        {isSaving ? "Сохраняем..." : listing ? "Сохранить" : "Опубликовать"}
       </Button>
+
       {result && <p className="text-sm text-muted-foreground">{result}</p>}
     </form>
   );

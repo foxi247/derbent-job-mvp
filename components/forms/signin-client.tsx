@@ -30,13 +30,7 @@ export function SignInClient() {
   return (
     <div className="space-y-3">
       <form onSubmit={onEmail} className="space-y-2">
-        <Input
-          type="email"
-          required
-          placeholder="Ваш email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <Input type="email" required placeholder="Ваш email" value={email} onChange={(event) => setEmail(event.target.value)} />
         <Button className="w-full" type="submit" disabled={isPending}>
           Войти по email
         </Button>
@@ -60,39 +54,61 @@ export function SignInClient() {
         Продолжить через Yandex
       </Button>
 
-      <Button
-        className="w-full"
-        variant="ghost"
-        disabled={isPending}
-        onClick={() =>
-          startTransition(() =>
-            signIn("demo", {
-              email: "demo.executor@local.test",
-              role: "EXECUTOR",
-              callbackUrl: "/dashboard"
-            })
-          )
-        }
-      >
-        Демо вход (исполнитель)
-      </Button>
+      <details className="rounded-lg border p-2 text-sm">
+        <summary className="cursor-pointer">Демо вход</summary>
+        <div className="mt-2 space-y-2">
+          <Button
+            className="w-full"
+            variant="ghost"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(() =>
+                signIn("demo", {
+                  email: "demo.executor@local.test",
+                  role: "EXECUTOR",
+                  callbackUrl: "/dashboard"
+                })
+              )
+            }
+          >
+            Демо исполнитель
+          </Button>
 
-      <Button
-        className="w-full"
-        variant="ghost"
-        disabled={isPending}
-        onClick={() =>
-          startTransition(() =>
-            signIn("demo", {
-              email: "demo.employer@local.test",
-              role: "EMPLOYER",
-              callbackUrl: "/dashboard-employer"
-            })
-          )
-        }
-      >
-        Демо вход (работодатель)
-      </Button>
+          <Button
+            className="w-full"
+            variant="ghost"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(() =>
+                signIn("demo", {
+                  email: "demo.employer@local.test",
+                  role: "EMPLOYER",
+                  callbackUrl: "/dashboard-employer"
+                })
+              )
+            }
+          >
+            Демо работодатель
+          </Button>
+
+          <Button
+            className="w-full"
+            variant="ghost"
+            disabled={isPending}
+            onClick={() =>
+              startTransition(() =>
+                signIn("demo", {
+                  email: "demo.admin@local.test",
+                  role: "ADMIN",
+                  callbackUrl: "/admin"
+                })
+              )
+            }
+          >
+            Демо админ
+          </Button>
+        </div>
+      </details>
 
       {info && <p className="text-sm text-muted-foreground">{info}</p>}
     </div>

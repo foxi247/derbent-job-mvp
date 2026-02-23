@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { experienceSchema } from "@/lib/validations";
+import { z } from "zod";
+
+const experienceSchema = z.object({
+  experienceYears: z.number().int().min(0).max(60)
+});
 
 export async function PATCH(req: NextRequest) {
   const session = await auth();

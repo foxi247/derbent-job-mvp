@@ -23,29 +23,39 @@ export function MessageForm({ listingId, jobPostId, title = "Написать" }
     setIsSending(true);
     setResult("");
 
-    const res = await fetch("/api/messages", {
+    const response = await fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ listingId, jobPostId, senderName, senderContact, text })
     });
 
     setIsSending(false);
-    setResult(res.ok ? "Сообщение отправлено" : "Не удалось отправить сообщение");
-    if (res.ok) {
+
+    if (response.ok) {
+      setResult("Сообщение отправлено");
       setSenderName("");
       setSenderContact("");
       setText("");
+      return;
     }
+
+    const payload = await response.json().catch(() => null);
+    setResult(payload?.error ?? "Не удалось отправить сообщение");
   }
 
   return (
     <form onSubmit={submit} className="surface space-y-2 p-4">
       <h3 className="font-medium">{title}</h3>
-      <Input required value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="Ваше имя" />
-      <Input required value={senderContact} onChange={(e) => setSenderContact(e.target.value)} placeholder="Контакт: email или мессенджер" />
-      <Textarea required value={text} onChange={(e) => setText(e.target.value)} placeholder="Текст сообщения" />
-      <Button type="submit" disabled={isSending}>
-        {isSending ? "Отправляем..." : "Отправить"}
+      <Input required value={senderName} onChange={(event) => setSenderName(event.target.value)} placeholder="Ваше имя" />
+      <Input
+        required
+        value={senderContact}
+        onChange={(event) => setSenderContact(event.target.value)}
+        placeholder="Контакт: email или мессенджер"
+      />
+      <Textarea required value={text} onChange={(event) => setText(event.target.value)} placeholder="Текст сообщения" />
+      <Button type="submit" disabled={isSending} className="w-full">
+        {isSending ? "Отправляем..." : "Написать"}
       </Button>
       {result && <p className="text-sm text-muted-foreground">{result}</p>}
     </form>

@@ -9,13 +9,13 @@ export function RoleSelector({ currentRole }: { currentRole: "EXECUTOR" | "EMPLO
   const [pending, startTransition] = useTransition();
 
   async function setRole(role: "EXECUTOR" | "EMPLOYER") {
-    const res = await fetch("/api/role", {
+    const response = await fetch("/api/role", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role })
     });
 
-    if (res.ok) {
+    if (response.ok) {
       startTransition(() => {
         router.push(role === "EXECUTOR" ? "/dashboard" : "/dashboard-employer");
         router.refresh();

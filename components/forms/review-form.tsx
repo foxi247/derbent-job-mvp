@@ -56,9 +56,9 @@ export function ReviewForm({ jobPostId, executors }: ReviewFormProps) {
 
   return (
     <form onSubmit={submit} className="surface space-y-2 p-4">
-      <h3 className="font-medium">Оставить отзыв после завершения</h3>
+      <h3 className="font-medium">Оставить отзыв</h3>
 
-      <Select value={executorUserId} onChange={(e) => setExecutorUserId(e.target.value)} required>
+      <Select value={executorUserId} onChange={(event) => setExecutorUserId(event.target.value)} required>
         {executors.length === 0 && <option value="">Нет исполнителей</option>}
         {executors.map((executor) => (
           <option key={executor.id} value={executor.id}>
@@ -67,7 +67,7 @@ export function ReviewForm({ jobPostId, executors }: ReviewFormProps) {
         ))}
       </Select>
 
-      <Select value={rating} onChange={(e) => setRating(e.target.value)}>
+      <Select value={rating} onChange={(event) => setRating(event.target.value)}>
         <option value="5">5 - Отлично</option>
         <option value="4">4 - Хорошо</option>
         <option value="3">3 - Нормально</option>
@@ -75,7 +75,7 @@ export function ReviewForm({ jobPostId, executors }: ReviewFormProps) {
         <option value="1">1 - Плохо</option>
       </Select>
 
-      <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Комментарий к работе (опционально)" />
+      <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Комментарий (опционально)" />
 
       <Button type="submit" disabled={isSaving || executors.length === 0}>
         {isSaving ? "Сохраняем..." : "Оставить отзыв"}

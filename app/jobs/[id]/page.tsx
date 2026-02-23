@@ -1,19 +1,26 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { maskPhone } from "@/lib/phone";
 import { PAY_TYPE_LABELS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
-import { MessageForm } from "@/components/forms/message-form";
+import { Button } from "@/components/ui/button";
 import { ContactReveal } from "@/components/forms/contact-reveal";
-import { maskPhone } from "@/lib/phone";
+import { MessageForm } from "@/components/forms/message-form";
 
-export default async function JobDetailsPage({ params }: { params: { id: string } }) {
-  const jobPost = await prisma.jobPost.findUnique({
+type JobPageProps = {
+  params: {
+    id: string;
+  };
+};
+
+export default async function JobPage({ params }: JobPageProps) {
+  const job = await prisma.jobPost.findUnique({
     where: { id: params.id },
     include: {
       user: {
         select: {
           name: true,
-          image: true,
           profile: {
             select: {
               phone: true
@@ -24,52 +31,53 @@ export default async function JobDetailsPage({ params }: { params: { id: string 
     }
   });
 
-  if (!jobPost) {
+  if (!job) {
     notFound();
   }
 
-  const contactPhone = jobPost.phone ?? jobPost.user.profile?.phone ?? null;
+  const ownerPhone = job.phone ?? job.user.profile?.phone ?? null;
+  const maskedPhone = maskPhone(ownerPhone);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
-      <article className="surface space-y-4 p-5 md:p-6">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">{jobPost.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            {jobPost.category} • Дербент{jobPost.district ? `, ${jobPost.district}` : ""}
-          </p>
-        </div>
+    <div className="space-y-6">
+      <Button asChild variant="outline" size="sm">
+        <Link href="/jobs">Назад к заданиям</Link>
+      </Button>
 
-        <div className="flex flex-wrap gap-2">
-          {jobPost.urgentToday && <Badge className="bg-amber-100 text-amber-800">Срочно</Badge>}
-          <Badge>
-            {jobPost.payType === "NEGOTIABLE"
-              ? "Оплата договорная"
-              : `${jobPost.payValue != null ? String(jobPost.payValue) : "-"} RUB ${PAY_TYPE_LABELS[jobPost.payType]}`}
-          </Badge>
-          <Badge>{jobPost.status === "ACTIVE" ? "Активно" : jobPost.status === "PAUSED" ? "На паузе" : "Завершено"}</Badge>
-        </div>
+      <section className="surface space-y-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">{job.title}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {job.category} • {job.user.name ?? "Работодатель"}
+            </p>
+          </div>
 
-        <p className="text-sm leading-6">{jobPost.description}</p>
-
-        <div className="rounded-xl bg-secondary/50 p-4 text-sm">
-          <h2 className="mb-2 font-medium">Контакт работодателя</h2>
-          <p>
-            <span className="text-muted-foreground">Имя:</span> {jobPost.user.name ?? "Не указано"}
-          </p>
-          <div className="mt-2">
-            <ContactReveal
-              jobPostId={jobPost.id}
-              hasPhone={Boolean(contactPhone)}
-              maskedPhone={maskPhone(contactPhone)}
-            />
+          <div className="text-right">
+            <p className="text-lg font-semibold">
+              {job.payType === "NEGOTIABLE" ? "Договорная" : `${job.payValue ?? "-"} ₽`}
+            </p>
+            <p className="text-sm text-muted-foreground">{PAY_TYPE_LABELS[job.payType]}</p>
           </div>
         </div>
-      </article>
 
-      <aside>
-        <MessageForm jobPostId={jobPost.id} title="Откликнуться / написать работодателю" />
-      </aside>
+        <p className="text-sm text-muted-foreground">{job.description}</p>
+
+        <div className="flex flex-wrap gap-2">
+          {job.urgentToday && <Badge className="bg-amber-100 text-amber-800">Срочно</Badge>}
+          <Badge>{job.district ? `Район: ${job.district}` : "Дербент"}</Badge>
+          <Badge>{job.status === "ACTIVE" ? "Активно" : job.status === "PAUSED" ? "На паузе" : "Завершено"}</Badge>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <article className="surface space-y-3 p-5">
+          <h2 className="text-lg font-semibold">Контакты работодателя</h2>
+          <ContactReveal maskedPhone={maskedPhone} jobPostId={job.id} hasPhone={Boolean(ownerPhone)} />
+        </article>
+
+        <MessageForm jobPostId={job.id} title="Откликнуться / Написать" />
+      </section>
     </div>
   );
 }

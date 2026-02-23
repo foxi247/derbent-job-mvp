@@ -35,6 +35,10 @@ body {
     linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
 }
 
+summary::-webkit-details-marker {
+  display: none;
+}
+
 @layer utilities {
   .surface {
     @apply rounded-2xl border bg-white/90 shadow-sm backdrop-blur;

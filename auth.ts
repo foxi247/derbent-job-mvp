@@ -1,9 +1,11 @@
-import NextAuth from "next-auth";
+﻿import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import Email from "next-auth/providers/email";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
+
+type AppRole = "EXECUTOR" | "EMPLOYER" | "ADMIN";
 
 const yandexProvider = {
   id: "yandex",
@@ -24,6 +26,12 @@ const yandexProvider = {
     };
   }
 };
+
+function normalizeRole(value: unknown): AppRole {
+  if (value === "ADMIN") return "ADMIN";
+  if (value === "EMPLOYER") return "EMPLOYER";
+  return "EXECUTOR";
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -61,20 +69,48 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           typeof credentials?.email === "string" && credentials.email.length > 3
             ? credentials.email
             : "demo.executor@local.test";
-        const role = credentials?.role === "EMPLOYER" ? "EMPLOYER" : "EXECUTOR";
 
-        const user = await prisma.user.upsert({
-          where: { email },
-          update: { role },
-          create: {
-            email,
-            role,
-            name: role === "EXECUTOR" ? "Демо исполнитель" : "Демо работодатель"
+        const requestedRole = normalizeRole(credentials?.role);
+        let effectiveRole: AppRole = requestedRole;
+
+        let user: any;
+        try {
+          user = await (prisma as any).user.upsert({
+            where: { email },
+            update: { role: effectiveRole },
+            create: {
+              email,
+              role: effectiveRole,
+              name:
+                effectiveRole === "EXECUTOR"
+                  ? "Демо исполнитель"
+                  : effectiveRole === "ADMIN"
+                    ? "Демо администратор"
+                    : "Демо работодатель"
+            }
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+
+          if (requestedRole === "ADMIN" && message.includes("Invalid value for argument `role`")) {
+            // Совместимость: если enum ADMIN еще не применен в БД, даем войти как EMPLOYER.
+            effectiveRole = "EMPLOYER";
+            user = await (prisma as any).user.upsert({
+              where: { email },
+              update: { role: effectiveRole },
+              create: {
+                email,
+                role: effectiveRole,
+                name: "Демо работодатель"
+              }
+            });
+          } else {
+            throw error;
           }
-        });
+        }
 
-        if (role === "EXECUTOR") {
-          await prisma.profile.upsert({
+        if (effectiveRole === "EXECUTOR") {
+          await (prisma as any).profile.upsert({
             where: { userId: user.id },
             update: {},
             create: {
@@ -95,7 +131,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role
+          role: user.role,
+          balanceRub: user.balanceRub ?? 0,
+          isBanned: user.isBanned ?? false
         };
       }
     }),
@@ -105,17 +143,51 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.role = (user as { role?: string }).role ?? "EMPLOYER";
+        token.balanceRub = (user as { balanceRub?: number }).balanceRub ?? 0;
+        token.isBanned = (user as { isBanned?: boolean }).isBanned ?? false;
       }
+
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.sub ?? "";
-        const dbUser = token.sub ? await prisma.user.findUnique({ where: { id: token.sub }, select: { role: true } }) : null;
-        session.user.role = dbUser?.role ?? (token.role as "EXECUTOR" | "EMPLOYER") ?? "EMPLOYER";
+      if (!session.user) {
+        return session;
       }
+
+      session.user.id = token.sub ?? "";
+
+      let dbUser: { role?: AppRole; balanceRub?: number; isBanned?: boolean } | null = null;
+
+      if (token.sub) {
+        try {
+          dbUser = await (prisma as any).user.findUnique({
+            where: { id: token.sub },
+            select: { role: true, balanceRub: true, isBanned: true }
+          });
+        } catch {
+          const fallbackUser = await (prisma as any).user.findUnique({
+            where: { id: token.sub },
+            select: { role: true }
+          });
+
+          dbUser = fallbackUser
+            ? {
+                role: fallbackUser.role,
+                balanceRub: 0,
+                isBanned: false
+              }
+            : null;
+        }
+      }
+
+      session.user.role =
+        (dbUser?.role as "EXECUTOR" | "EMPLOYER" | "ADMIN" | undefined) ??
+        (token.role as "EXECUTOR" | "EMPLOYER" | "ADMIN") ??
+        "EMPLOYER";
+      session.user.balanceRub = dbUser?.balanceRub ?? (token.balanceRub as number) ?? 0;
+      session.user.isBanned = dbUser?.isBanned ?? (token.isBanned as boolean) ?? false;
+
       return session;
     }
   }
 });
-

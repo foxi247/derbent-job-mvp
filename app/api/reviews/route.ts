@@ -3,11 +3,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { reviewSchema } from "@/lib/validations";
+import { assertNotBanned } from "@/lib/access";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user || session.user.role !== "EMPLOYER") {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
+  }
+
+  try {
+    await assertNotBanned(session.user.id);
+  } catch {
+    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
   }
 
   const body = await req.json();
@@ -36,11 +43,15 @@ export async function POST(req: NextRequest) {
 
   const executor = await prisma.user.findUnique({
     where: { id: parsed.data.executorUserId },
-    select: { id: true, role: true }
+    select: { id: true, role: true, isBanned: true }
   });
 
   if (!executor || executor.role !== "EXECUTOR") {
     return NextResponse.json({ error: "Исполнитель не найден" }, { status: 404 });
+  }
+
+  if (executor.isBanned) {
+    return NextResponse.json({ error: "Нельзя оставить отзыв заблокированному пользователю" }, { status: 400 });
   }
 
   try {

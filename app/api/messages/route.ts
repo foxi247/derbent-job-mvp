@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { messageSchema } from "@/lib/validations";
+import { assertNotBanned } from "@/lib/access";
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Войдите в аккаунт, чтобы написать сообщение" }, { status: 401 });
+  }
+
+  try {
+    await assertNotBanned(session.user.id);
+  } catch {
+    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+  }
+
   const body = await req.json();
   const parsed = messageSchema.safeParse(body);
 
@@ -13,7 +26,7 @@ export async function POST(req: NextRequest) {
   if (parsed.data.listingId) {
     const exists = await prisma.listing.findUnique({ where: { id: parsed.data.listingId }, select: { id: true } });
     if (!exists) {
-      return NextResponse.json({ error: "Объявление исполнителя не найдено" }, { status: 404 });
+      return NextResponse.json({ error: "Карточка исполнителя не найдена" }, { status: 404 });
     }
   }
 
@@ -36,4 +49,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(message, { status: 201 });
 }
-

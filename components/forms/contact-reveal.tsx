@@ -42,7 +42,8 @@ export function ContactReveal({ maskedPhone, listingId, jobPostId, hasPhone }: C
       return;
     }
 
-    setStatus("Не удалось открыть номер.");
+    const payload = await response.json().catch(() => null);
+    setStatus(payload?.error ?? "Не удалось открыть номер.");
   }
 
   return (

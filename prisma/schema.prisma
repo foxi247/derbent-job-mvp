@@ -11,10 +11,16 @@ datasource db {
 enum UserRole {
   EXECUTOR
   EMPLOYER
+  ADMIN
 }
 
 enum City {
   DERBENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
 }
 
 enum PriceType {
@@ -50,25 +56,49 @@ enum ContactTargetType {
   JOB_POST
 }
 
-model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  role          UserRole  @default(EMPLOYER)
-  createdAt     DateTime  @default(now())
+enum TopUpStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
 
-  accounts         Account[]
-  sessions         Session[]
-  profile          Profile?
-  listings         Listing[]
-  jobPosts         JobPost[]
-  reviewsReceived  Review[]      @relation("ExecutorReviews")
-  reviewsGiven     Review[]      @relation("EmployerReviews")
-  contactViews     ContactView[]
+enum TariffKind {
+  BASIC
+  PREMIUM
+  GOLD
+}
+
+enum ListingTariffStatus {
+  ACTIVE
+  EXPIRED
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  name                String?
+  email               String?   @unique
+  emailVerified       DateTime?
+  image               String?
+  role                UserRole  @default(EMPLOYER)
+  balanceRub          Int       @default(0)
+  isBanned            Boolean   @default(false)
+  bannedAt            DateTime?
+  createdAt           DateTime  @default(now())
+
+  accounts            Account[]
+  sessions            Session[]
+  profile             Profile?
+  listings            Listing[]
+  jobPosts            JobPost[]
+  reviewsReceived     Review[]        @relation("ExecutorReviews")
+  reviewsGiven        Review[]        @relation("EmployerReviews")
+  contactViews        ContactView[]
+  topUpRequests       TopUpRequest[]  @relation("TopUpOwner")
+  approvedTopUps      TopUpRequest[]  @relation("TopUpApprover")
 
   @@index([role])
+  @@index([isBanned])
 }
 
 model Profile {
@@ -76,6 +106,10 @@ model Profile {
   userId          String   @unique
   city            City     @default(DERBENT)
   about           String   @default("")
+  gender          Gender?
+  age             Int?
+  workCategory    String?
+  previousWork    String?
   experienceYears Int      @default(0)
   skills          String[]
   availability    String   @default("По договоренности")
@@ -85,28 +119,32 @@ model Profile {
   updatedAt       DateTime @updatedAt
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workCategory])
+  @@index([experienceYears])
 }
 
 model Listing {
-  id          String        @id @default(cuid())
-  userId      String
-  title       String
-  category    String
-  description String
-  priceType   PriceType
-  priceValue  Decimal?
-  currency    Currency      @default(RUB)
-  status      ListingStatus @default(ACTIVE)
-  city        City          @default(DERBENT)
-  district    String?
-  expiresAt   DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  userId        String
+  title         String
+  category      String
+  description   String
+  priceType     PriceType
+  priceValue    Decimal?
+  currency      Currency      @default(RUB)
+  status        ListingStatus @default(ACTIVE)
+  city          City          @default(DERBENT)
+  district      String?
+  expiresAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  promotions  ListingPromotion[]
-  messages    Message[]
-  contactViews ContactView[]
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promotions    ListingPromotion[]
+  tariffs       ListingTariff[]
+  messages      Message[]
+  contactViews  ContactView[]
 
   @@index([category])
   @@index([status])
@@ -115,28 +153,29 @@ model Listing {
 }
 
 model JobPost {
-  id          String        @id @default(cuid())
-  userId      String
-  title       String
-  category    String
-  description String
-  payType     PayType
-  payValue    Decimal?
-  currency    Currency      @default(RUB)
-  city        City          @default(DERBENT)
-  district    String?
-  phone       String?
-  urgentToday Boolean       @default(false)
-  status      JobPostStatus @default(ACTIVE)
-  expiresAt   DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  userId        String
+  title         String
+  category      String
+  description   String
+  payType       PayType
+  payValue      Decimal?
+  currency      Currency      @default(RUB)
+  city          City          @default(DERBENT)
+  district      String?
+  phone         String?
+  urgentToday   Boolean       @default(false)
+  status        JobPostStatus @default(ACTIVE)
+  expiresAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages    Message[]
-  promotions  ListingPromotion[]
-  reviews     Review[]
-  contactViews ContactView[]
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages      Message[]
+  promotions    ListingPromotion[]
+  tariffs       ListingTariff[]
+  reviews       Review[]
+  contactViews  ContactView[]
 
   @@index([category])
   @@index([status])
@@ -145,13 +184,13 @@ model JobPost {
 }
 
 model PaymentPlan {
-  id           String   @id @default(cuid())
-  name         String
-  durationDays Int
-  priceRub     Int
-  isActive     Boolean  @default(true)
+  id            String   @id @default(cuid())
+  name          String
+  durationDays  Int
+  priceRub      Int
+  isActive      Boolean  @default(true)
 
-  promotions   ListingPromotion[]
+  promotions    ListingPromotion[]
 }
 
 model ListingPromotion {
@@ -171,6 +210,71 @@ model ListingPromotion {
   @@index([listingId])
   @@index([jobPostId])
   @@index([endsAt])
+}
+
+model TariffPlan {
+  id             String      @id @default(cuid())
+  name           String
+  priceRub       Int
+  durationDays   Int
+  kind           TariffKind
+  discountPercent Int        @default(0)
+  isActive       Boolean     @default(true)
+  sortOrder      Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  listings       ListingTariff[]
+
+  @@index([kind, sortOrder])
+}
+
+model ListingTariff {
+  id            String              @id @default(cuid())
+  listingId     String?
+  jobPostId     String?
+  tariffPlanId  String
+  startsAt      DateTime            @default(now())
+  endsAt        DateTime
+  status        ListingTariffStatus @default(ACTIVE)
+  createdAt     DateTime            @default(now())
+
+  listing       Listing?    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  jobPost       JobPost?    @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  tariffPlan    TariffPlan  @relation(fields: [tariffPlanId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([jobPostId])
+  @@index([status, endsAt])
+}
+
+model TopUpRequest {
+  id            String      @id @default(cuid())
+  userId        String
+  approverUserId String?
+  amountRub     Int
+  status        TopUpStatus @default(PENDING)
+  proofText     String?
+  adminNote     String?
+  createdAt     DateTime    @default(now())
+  expiresAt     DateTime
+  updatedAt     DateTime    @updatedAt
+
+  user          User        @relation("TopUpOwner", fields: [userId], references: [id], onDelete: Cascade)
+  approver      User?       @relation("TopUpApprover", fields: [approverUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+}
+
+model AdminSettings {
+  id            String   @id @default(cuid())
+  bankName      String
+  cardNumber    String?
+  phoneNumber   String?
+  recipientName String
+  instructions  String
+  updatedAt     DateTime @updatedAt
 }
 
 model Message {
@@ -208,16 +312,16 @@ model Review {
 }
 
 model ContactView {
-  id          String            @id @default(cuid())
-  viewerUserId String
-  targetType  ContactTargetType
-  listingId   String?
-  jobPostId   String?
-  createdAt   DateTime          @default(now())
+  id            String            @id @default(cuid())
+  viewerUserId  String
+  targetType    ContactTargetType
+  listingId     String?
+  jobPostId     String?
+  createdAt     DateTime          @default(now())
 
-  viewer      User              @relation(fields: [viewerUserId], references: [id], onDelete: Cascade)
-  listing     Listing?          @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  jobPost     JobPost?          @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  viewer        User              @relation(fields: [viewerUserId], references: [id], onDelete: Cascade)
+  listing       Listing?          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  jobPost       JobPost?          @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
 
   @@index([viewerUserId])
   @@index([listingId])
@@ -259,3 +363,4 @@ model VerificationToken {
 
   @@id([identifier, token])
 }
+

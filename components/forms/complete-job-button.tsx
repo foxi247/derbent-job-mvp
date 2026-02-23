@@ -20,12 +20,13 @@ export function CompleteJobButton({ jobPostId }: { jobPostId: string }) {
     setLoading(false);
 
     if (response.ok) {
-      setMessage("Задание отмечено как завершенное");
+      setMessage("Задание завершено");
       router.refresh();
       return;
     }
 
-    setMessage("Не удалось завершить задание");
+    const payload = await response.json().catch(() => null);
+    setMessage(payload?.error ?? "Не удалось завершить задание");
   }
 
   return (

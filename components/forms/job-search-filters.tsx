@@ -24,7 +24,8 @@ export function JobSearchFilters({ categories }: { categories: string[] }) {
     if (payType) next.set("payType", payType);
     if (urgent) next.set("urgent", urgent);
 
-    router.push(`/jobs?${next.toString()}`);
+    const queryString = next.toString();
+    router.push(queryString ? `/jobs?${queryString}` : "/jobs");
   }
 
   function reset() {
@@ -36,41 +37,52 @@ export function JobSearchFilters({ categories }: { categories: string[] }) {
   }
 
   return (
-    <form onSubmit={apply} className="surface grid gap-3 p-4 md:grid-cols-3 xl:grid-cols-6">
-      <div className="md:col-span-3 xl:col-span-6">
-        <p className="text-sm font-medium">Фильтры заданий</p>
-        <p className="text-xs text-muted-foreground">Показываются только активные задания по Дербенту.</p>
+    <form onSubmit={apply} className="surface space-y-3 p-4">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Поиск по заданию"
+          className="lg:col-span-2"
+        />
+
+        <Select value={category} onChange={(event) => setCategory(event.target.value)}>
+          <option value="">Категория</option>
+          {categories.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </Select>
+
+        <Select value={payType} onChange={(event) => setPayType(event.target.value)}>
+          <option value="">Оплата</option>
+          <option value="PER_HOUR">За час</option>
+          <option value="FIXED">Фикс</option>
+          <option value="NEGOTIABLE">Договорная</option>
+        </Select>
       </div>
 
-      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск по названию и описанию" className="xl:col-span-2" />
+      <details className="rounded-lg border bg-background/70 p-3 text-sm">
+        <summary className="cursor-pointer font-medium">Доп. фильтры</summary>
 
-      <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-        <option value="">Категория</option>
-        {categories.map((categoryItem) => (
-          <option key={categoryItem} value={categoryItem}>
-            {categoryItem}
-          </option>
-        ))}
-      </Select>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <Select value={urgent} onChange={(event) => setUrgent(event.target.value)}>
+            <option value="">Срочно</option>
+            <option value="true">Да</option>
+            <option value="false">Нет</option>
+          </Select>
 
-      <Select value={payType} onChange={(e) => setPayType(e.target.value)}>
-        <option value="">Оплата</option>
-        <option value="PER_HOUR">За час</option>
-        <option value="FIXED">Фикс</option>
-        <option value="NEGOTIABLE">Договорная</option>
-      </Select>
+          <div className="flex items-center">
+            <Button type="button" variant="ghost" size="sm" onClick={reset}>
+              Сбросить все
+            </Button>
+          </div>
+        </div>
+      </details>
 
-      <Select value={urgent} onChange={(e) => setUrgent(e.target.value)}>
-        <option value="">Срочно</option>
-        <option value="true">Да</option>
-        <option value="false">Нет</option>
-      </Select>
-
-      <Button type="submit" className="w-full">
-        Применить
-      </Button>
-      <Button type="button" variant="outline" className="w-full" onClick={reset}>
-        Сбросить
+      <Button type="submit" className="w-full sm:w-auto">
+        Найти задание
       </Button>
     </form>
   );

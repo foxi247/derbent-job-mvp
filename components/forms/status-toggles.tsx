@@ -16,34 +16,37 @@ export function StatusToggles({ isOnline, urgentToday }: { isOnline: boolean; ur
   const [urgentState, setUrgentState] = useState(urgentToday);
 
   return (
-    <div className="surface grid gap-4 p-4 md:grid-cols-2">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="font-medium">В сети</p>
-          <p className="text-xs text-muted-foreground">Ручной переключатель активности</p>
+    <details className="surface p-4">
+      <summary className="cursor-pointer text-sm font-medium">Статусы анкеты</summary>
+      <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium">В сети</p>
+            <p className="text-xs text-muted-foreground">Ручной переключатель активности</p>
+          </div>
+          <Switch
+            checked={onlineState}
+            onCheckedChange={(value) => {
+              setOnlineState(value);
+              void patchStatus({ isOnline: value });
+            }}
+          />
         </div>
-        <Switch
-          checked={onlineState}
-          onCheckedChange={(value) => {
-            setOnlineState(value);
-            void patchStatus({ isOnline: value });
-          }}
-        />
-      </div>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="font-medium">Срочно / готов сегодня</p>
-          <p className="text-xs text-muted-foreground">Отображается в карточке объявления</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium">Срочно / готов сегодня</p>
+            <p className="text-xs text-muted-foreground">Показывается в карточке</p>
+          </div>
+          <Switch
+            checked={urgentState}
+            onCheckedChange={(value) => {
+              setUrgentState(value);
+              void patchStatus({ urgentToday: value });
+            }}
+          />
         </div>
-        <Switch
-          checked={urgentState}
-          onCheckedChange={(value) => {
-            setUrgentState(value);
-            void patchStatus({ urgentToday: value });
-          }}
-        />
       </div>
-    </div>
+    </details>
   );
 }

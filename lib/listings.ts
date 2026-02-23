@@ -1,13 +1,19 @@
-import { Listing, ListingStatus, Prisma } from "@prisma/client";
+import { Listing, ListingStatus, Prisma, TariffKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { pauseExpiredPublications } from "@/lib/visibility";
+import { expireEntities } from "@/lib/lifecycle";
+import { sortByTariffKind } from "@/lib/tariffs";
 
 export type ListingWithProfile = Listing & {
+  activeTariffKind: TariffKind | "BASIC";
   user: {
     name: string | null;
     image: string | null;
     profile: {
       about: string;
+      gender: "MALE" | "FEMALE" | null;
+      age: number | null;
+      workCategory: string | null;
+      previousWork: string | null;
       experienceYears: number;
       skills: string[];
       availability: string;
@@ -29,7 +35,7 @@ export type ListingFilters = {
 };
 
 export async function getListings(filters: ListingFilters): Promise<ListingWithProfile[]> {
-  await pauseExpiredPublications();
+  await expireEntities();
 
   const experienceYears: Prisma.IntFilter = {};
   if (typeof filters.experienceMin === "number") {
@@ -49,6 +55,11 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
     status: ListingStatus.ACTIVE,
     city: "DERBENT",
     expiresAt: { gt: new Date() },
+    user: {
+      is: {
+        isBanned: false
+      }
+    },
     ...(filters.category ? { category: filters.category } : {}),
     ...(filters.priceType ? { priceType: filters.priceType } : {}),
     ...(filters.query
@@ -64,6 +75,7 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
       ? {
           user: {
             is: {
+              isBanned: false,
               profile: {
                 is: profileWhere
               }
@@ -73,7 +85,7 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
       : {})
   };
 
-  return prisma.listing.findMany({
+  const rows = await prisma.listing.findMany({
     where,
     include: {
       user: {
@@ -83,6 +95,10 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
           profile: {
             select: {
               about: true,
+              gender: true,
+              age: true,
+              workCategory: true,
+              previousWork: true,
               experienceYears: true,
               skills: true,
               availability: true,
@@ -92,9 +108,21 @@ export async function getListings(filters: ListingFilters): Promise<ListingWithP
             }
           }
         }
+      },
+      tariffs: {
+        where: { status: "ACTIVE", endsAt: { gt: new Date() } },
+        include: { tariffPlan: { select: { kind: true } } },
+        orderBy: { endsAt: "desc" },
+        take: 1
       }
     },
     orderBy: { updatedAt: "desc" }
   });
-}
 
+  const mapped = rows.map((row) => ({
+    ...row,
+    activeTariffKind: row.tariffs[0]?.tariffPlan.kind ?? "BASIC"
+  })) as ListingWithProfile[];
+
+  return sortByTariffKind(mapped);
+}

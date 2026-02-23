@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import { getJobPosts } from "@/lib/jobs";
-import { createJobPostPromotion } from "@/lib/promotion";
+import { prisma } from "@/lib/prisma";
+import { assertNotBanned } from "@/lib/access";
+import { publishJobByTariff } from "@/lib/tariffs";
 import { jobPostSchema, jobQuerySchema } from "@/lib/validations";
+
+function mapPublicationError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message === "NOT_ENOUGH_BALANCE") {
+    return NextResponse.json({ error: "Недостаточно средств на балансе" }, { status: 400 });
+  }
+
+  if (message === "TARIFF_NOT_FOUND") {
+    return NextResponse.json({ error: "Тариф не найден или отключен" }, { status: 404 });
+  }
+
+  if (message === "USER_BANNED") {
+    return NextResponse.json({ error: "Аккаунт заблокирован. Публикация недоступна" }, { status: 403 });
+  }
+
+  throw error;
+}
 
 export async function GET(req: NextRequest) {
   const params = Object.fromEntries(req.nextUrl.searchParams.entries());
@@ -29,11 +48,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
   }
 
+  try {
+    await assertNotBanned(session.user.id);
+  } catch {
+    return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+  }
+
   const body = await req.json();
   const parsed = jobPostSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const shouldPublish = parsed.data.status === "ACTIVE";
+  if (shouldPublish && !parsed.data.tariffPlanId) {
+    return NextResponse.json({ error: "Выберите тариф перед публикацией" }, { status: 400 });
   }
 
   const jobPost = await prisma.jobPost.create({
@@ -47,14 +77,27 @@ export async function POST(req: NextRequest) {
       district: parsed.data.district,
       phone: parsed.data.phone,
       urgentToday: parsed.data.urgentToday ?? false,
-      status: parsed.data.status,
+      status: shouldPublish ? "PAUSED" : parsed.data.status,
       city: "DERBENT"
     }
   });
 
-  if (parsed.data.status === "ACTIVE") {
-    const promoted = await createJobPostPromotion(jobPost.id);
-    return NextResponse.json(promoted, { status: 201 });
+  if (shouldPublish) {
+    try {
+      const published = await publishJobByTariff({
+        jobPostId: jobPost.id,
+        userId: session.user.id,
+        tariffPlanId: parsed.data.tariffPlanId as string
+      });
+
+      return NextResponse.json(published, { status: 201 });
+    } catch (error) {
+      await prisma.jobPost.update({
+        where: { id: jobPost.id },
+        data: { status: "PAUSED" }
+      });
+      return mapPublicationError(error);
+    }
   }
 
   return NextResponse.json(jobPost, { status: 201 });

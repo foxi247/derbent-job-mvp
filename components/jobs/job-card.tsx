@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { JobPostWithOwner } from "@/lib/jobs";
-import { PAY_TYPE_LABELS } from "@/lib/constants";
+import {
+  PAY_TYPE_LABELS,
+  TARIFF_KIND_BADGE_STYLES,
+  TARIFF_KIND_CARD_STYLES,
+  TARIFF_KIND_LABELS
+} from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
@@ -9,10 +14,19 @@ export function JobCard({ job }: { job: JobPostWithOwner }) {
   const employerLetter = employerName[0]?.toUpperCase() ?? "Р";
 
   return (
-    <Card className="group surface flex h-full flex-col space-y-3 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary font-semibold text-foreground">{employerLetter}</span>
-        <span className="truncate">{employerName}</span>
+    <Card
+      className={`group surface flex h-full flex-col space-y-3 p-4 transition hover:-translate-y-0.5 hover:shadow-md ${
+        TARIFF_KIND_CARD_STYLES[job.activeTariffKind]
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary font-semibold text-foreground">
+            {employerLetter}
+          </span>
+          <span className="truncate">{employerName}</span>
+        </div>
+        <Badge className={TARIFF_KIND_BADGE_STYLES[job.activeTariffKind]}>{TARIFF_KIND_LABELS[job.activeTariffKind]}</Badge>
       </div>
 
       <div className="flex items-start justify-between gap-2">

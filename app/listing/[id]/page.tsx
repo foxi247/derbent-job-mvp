@@ -1,23 +1,20 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { PRICE_TYPE_LABELS } from "@/lib/constants";
 import { maskPhone } from "@/lib/phone";
+import { PRICE_TYPE_LABELS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
-import { MessageForm } from "@/components/forms/message-form";
+import { Button } from "@/components/ui/button";
 import { ContactReveal } from "@/components/forms/contact-reveal";
+import { MessageForm } from "@/components/forms/message-form";
 
 type ListingPageProps = {
-  params: { id: string };
-  searchParams: Record<string, string | string[] | undefined>;
+  params: {
+    id: string;
+  };
 };
 
-export default async function ListingPage({ params, searchParams }: ListingPageProps) {
-  const pageValue = typeof searchParams.page === "string" ? Number(searchParams.page) : 1;
-  const currentPage = Number.isFinite(pageValue) && pageValue > 0 ? Math.floor(pageValue) : 1;
-  const take = 10;
-  const skip = (currentPage - 1) * take;
-
+export default async function ListingPage({ params }: ListingPageProps) {
   const listing = await prisma.listing.findUnique({
     where: { id: params.id },
     include: {
@@ -25,8 +22,19 @@ export default async function ListingPage({ params, searchParams }: ListingPageP
         select: {
           id: true,
           name: true,
-          image: true,
-          profile: true
+          profile: {
+            select: {
+              about: true,
+              experienceYears: true,
+              skills: true,
+              availability: true,
+              workCategory: true,
+              previousWork: true,
+              phone: true,
+              isOnline: true,
+              urgentToday: true
+            }
+          }
         }
       }
     }
@@ -36,130 +44,112 @@ export default async function ListingPage({ params, searchParams }: ListingPageP
     notFound();
   }
 
-  const profile = listing.user.profile;
-  const contactPhone = profile?.phone ?? null;
-
-  const [ratingStats, reviews] = await Promise.all([
+  const [reviewStats, reviews] = await Promise.all([
     prisma.review.aggregate({
       where: { executorUserId: listing.userId },
       _avg: { rating: true },
-      _count: { _all: true }
+      _count: { rating: true }
     }),
     prisma.review.findMany({
       where: { executorUserId: listing.userId },
       include: {
-        employer: {
-          select: {
-            name: true
-          }
-        },
-        jobPost: {
-          select: {
-            title: true
-          }
-        }
+        employer: { select: { name: true } },
+        jobPost: { select: { title: true } }
       },
       orderBy: { createdAt: "desc" },
-      skip,
-      take
+      take: 10
     })
   ]);
 
-  const totalReviews = ratingStats._count._all;
-  const averageRating = ratingStats._avg.rating;
-  const totalPages = Math.max(1, Math.ceil(totalReviews / take));
+  const profile = listing.user.profile;
+  const averageRating = reviewStats._avg.rating ? Number(reviewStats._avg.rating).toFixed(1) : null;
+  const reviewCount = reviewStats._count.rating;
+  const maskedPhone = maskPhone(profile?.phone);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
-      <article className="surface space-y-4 p-5 md:p-6">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">{listing.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            {listing.category} • Дербент{listing.district ? `, ${listing.district}` : ""}
-          </p>
-        </div>
+    <div className="space-y-6">
+      <Button asChild variant="outline" size="sm">
+        <Link href="/">Назад к исполнителям</Link>
+      </Button>
 
-        <div className="flex flex-wrap gap-2">
-          {profile?.isOnline && <Badge className="bg-emerald-100 text-emerald-700">В сети</Badge>}
-          {profile?.urgentToday && <Badge className="bg-amber-100 text-amber-800">Срочно / сегодня</Badge>}
-          <Badge>{profile?.experienceYears ?? 0} лет стажа</Badge>
-          <Badge>
-            {listing.priceType === "NEGOTIABLE"
-              ? "Цена договорная"
-              : `${listing.priceValue != null ? String(listing.priceValue) : "-"} RUB ${PRICE_TYPE_LABELS[listing.priceType]}`}
-          </Badge>
-        </div>
-
-        <p className="text-sm leading-6">{listing.description}</p>
-
-        <div className="rounded-xl bg-secondary/50 p-4 text-sm">
-          <h2 className="mb-2 font-medium">Профиль исполнителя</h2>
-          <p>
-            <span className="text-muted-foreground">Имя:</span> {listing.user.name ?? "Не указано"}
-          </p>
-          <p>
-            <span className="text-muted-foreground">О себе:</span> {profile?.about || "Без описания"}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Навыки:</span> {(profile?.skills ?? []).join(", ") || "Не указаны"}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Доступность:</span> {profile?.availability || "По договоренности"}
-          </p>
-
-          <div className="mt-3">
-            <ContactReveal listingId={listing.id} hasPhone={Boolean(contactPhone)} maskedPhone={maskPhone(contactPhone)} />
-          </div>
-        </div>
-
-        <section className="space-y-3 rounded-xl border bg-white/80 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-medium">Отзывы об исполнителе</h2>
-            <p className="text-sm text-muted-foreground">
-              {averageRating ? averageRating.toFixed(1) : "0.0"} / 5 • {totalReviews}
+      <section className="surface space-y-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">{listing.title}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {listing.category} • {listing.user.name ?? "Исполнитель"}
             </p>
           </div>
 
-          {reviews.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Пока нет отзывов.</p>
-          ) : (
-            <div className="space-y-2">
-              {reviews.map((review) => (
-                <div key={review.id} className="rounded-lg border bg-background/70 p-3 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium">{review.rating}/5 • {review.employer.name ?? "Работодатель"}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(review.createdAt).toLocaleDateString("ru-RU")}</p>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">Задание: {review.jobPost.title}</p>
-                  {review.text && <p className="mt-2 text-sm">{review.text}</p>}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="text-right">
+            <p className="text-lg font-semibold">
+              {listing.priceType === "NEGOTIABLE" ? "Договорная" : `${listing.priceValue ?? "-"} ₽`}
+            </p>
+            <p className="text-sm text-muted-foreground">{PRICE_TYPE_LABELS[listing.priceType]}</p>
+          </div>
+        </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2 text-sm">
-              <Link
-                className={`rounded-md border px-2 py-1 ${currentPage <= 1 ? "pointer-events-none opacity-50" : ""}`}
-                href={`/listing/${listing.id}?page=${currentPage - 1}`}
-              >
-                Назад
-              </Link>
-              <span className="text-muted-foreground">Страница {currentPage} из {totalPages}</span>
-              <Link
-                className={`rounded-md border px-2 py-1 ${currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}`}
-                href={`/listing/${listing.id}?page=${currentPage + 1}`}
-              >
-                Вперед
-              </Link>
-            </div>
-          )}
-        </section>
-      </article>
+        <p className="text-sm text-muted-foreground">{listing.description}</p>
 
-      <aside>
+        <div className="flex flex-wrap gap-2">
+          {profile?.isOnline && <Badge className="bg-emerald-100 text-emerald-700">В сети</Badge>}
+          {profile?.urgentToday && <Badge className="bg-amber-100 text-amber-800">Срочно ищу работу</Badge>}
+          <Badge>Стаж: {profile?.experienceYears ?? 0} лет</Badge>
+          <Badge>{listing.district ? `Район: ${listing.district}` : "Дербент"}</Badge>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <article className="surface space-y-3 p-5">
+          <h2 className="text-lg font-semibold">Профиль исполнителя</h2>
+          <p className="text-sm text-muted-foreground">{profile?.about || "Описание не заполнено."}</p>
+
+          <div className="space-y-1 text-sm">
+            <p>
+              <span className="text-muted-foreground">Категория:</span> {profile?.workCategory || listing.category}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Где работал:</span> {profile?.previousWork || "Не указано"}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Доступность:</span> {profile?.availability || "По договоренности"}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Навыки:</span>{" "}
+              {profile?.skills?.length ? profile.skills.join(", ") : "Не указаны"}
+            </p>
+          </div>
+
+          <ContactReveal maskedPhone={maskedPhone} listingId={listing.id} hasPhone={Boolean(profile?.phone)} />
+        </article>
+
         <MessageForm listingId={listing.id} title="Написать исполнителю" />
-      </aside>
+      </section>
+
+      <section className="surface space-y-3 p-5">
+        <h2 className="text-lg font-semibold">Рейтинг и отзывы</h2>
+        <p className="text-sm text-muted-foreground">
+          {averageRating ? `${averageRating} / 5` : "Пока без оценок"} • отзывов: {reviewCount}
+        </p>
+
+        {reviews.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Пока нет отзывов.</p>
+        ) : (
+          <div className="space-y-2">
+            {reviews.map((review) => (
+              <article key={review.id} className="rounded-xl border bg-background/70 p-3 text-sm">
+                <p className="font-medium">
+                  {review.rating}/5 • {review.employer.name ?? "Работодатель"}
+                </p>
+                {review.text && <p className="mt-1 text-muted-foreground">{review.text}</p>}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {review.jobPost.title} • {new Date(review.createdAt).toLocaleDateString("ru-RU")}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

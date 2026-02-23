@@ -1,6 +1,6 @@
-﻿# Работа/Подработка - Derbent MVP
+# Работа/Подработка - Derbent MVP
 
-Двусторонняя платформа для Дербента: работодатели публикуют задания, исполнители размещают услуги и откликаются.
+Двусторонняя платформа для Дербента: исполнители публикуют анкеты, работодатели публикуют задания.
 
 ## Стек
 
@@ -9,6 +9,52 @@
 - Next.js Route Handlers (API)
 - PostgreSQL + Prisma ORM
 - NextAuth/Auth.js (Email magic link + Google + Yandex)
+
+## Что реализовано
+
+- Роли: `EXECUTOR`, `EMPLOYER`, `ADMIN`
+- Лента исполнителей (`/`) и лента заданий (`/jobs`)
+- Детальные страницы: `/listing/[id]`, `/jobs/[id]`
+- Кабинет исполнителя: `/dashboard`
+- Кабинет работодателя: `/dashboard-employer`
+- Профиль: `/profile`
+- Админ-панель: `/admin`
+
+### Баланс и ручные пополнения (MVP)
+
+- У пользователя есть баланс `balanceRub`
+- Пользователь создает заявку на пополнение (`TopUpRequest`) на 30 минут
+- Показываются реквизиты из `AdminSettings`
+- Кнопка «Я оплатил» сохраняет `proofText`
+- Админ подтверждает/отклоняет заявку
+- При подтверждении баланс увеличивается вручную админом
+
+### Тарифы и публикация
+
+- Тарифы настраиваются в админке (`TariffPlan`): `BASIC` / `PREMIUM` / `GOLD`
+- При публикации/продлении:
+  - проверяется баланс
+  - списывается стоимость тарифа
+  - создается `ListingTariff`
+  - `expiresAt` у объявления обновляется
+- В публичных выдачах показываются только `ACTIVE` и не истекшие
+- Истекшие карточки не удаляются, а скрываются
+
+### Premium/Gold выделения
+
+- `BASIC`: обычная карточка
+- `PREMIUM`: акцентное оформление + бейдж
+- `GOLD`: бейдж + приоритет сортировки
+- Сортировка в выдаче: `GOLD -> PREMIUM -> BASIC`, затем `updatedAt desc`
+
+## Prisma модели (новое в этом этапе)
+
+- `User`: `balanceRub`, `isBanned`, `bannedAt`, роль `ADMIN`
+- `Profile`: `gender`, `age`, `workCategory`, `previousWork`, `phone`
+- `TopUpRequest`
+- `AdminSettings`
+- `TariffPlan`
+- `ListingTariff`
 
 ## Локальный запуск
 
@@ -20,20 +66,25 @@ npm install
 
 2. Скопируйте `.env.example` в `.env` и заполните значения.
 
-3. Примените миграции и сгенерируйте клиент Prisma:
+3. Примените миграции:
 
 ```bash
 npm run prisma:migrate
+```
+
+4. Сгенерируйте Prisma Client:
+
+```bash
 npm run prisma:generate
 ```
 
-4. Заполните базу тестовыми данными:
+5. Заполните базу тестовыми данными:
 
 ```bash
 npm run prisma:seed
 ```
 
-5. Запустите dev-сервер:
+6. Запустите проект:
 
 ```bash
 npm run dev
@@ -51,7 +102,7 @@ EMAIL_SERVER_HOST=
 EMAIL_SERVER_PORT=587
 EMAIL_SERVER_USER=
 EMAIL_SERVER_PASSWORD=
-EMAIL_FROM=
+EMAIL_FROM="Работа Дербент <no-reply@example.com>"
 
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -60,69 +111,63 @@ YANDEX_CLIENT_ID=
 YANDEX_CLIENT_SECRET=
 ```
 
-## Страницы
+## API (основное)
 
-- `/` — лента исполнителей (карточки услуг)
-- `/listing/[id]` — деталка исполнителя + контакт + отзывы
-- `/jobs` — лента заданий работодателей
-- `/jobs/[id]` — деталка задания + форма отклика
-- `/dashboard` — кабинет исполнителя
-- `/dashboard-employer` — кабинет работодателя
-- `/profile` — настройки профиля и телефона
-- `/auth/signin`, `/auth/role` — авторизация и выбор роли
-
-## API
+### Публичные
 
 - `GET /api/listings?query=&category=&online=&urgent=&experienceMin=&experienceMax=&priceType=`
-- `POST /api/listings` (только EXECUTOR)
 - `GET /api/listings/[id]`
-- `PATCH /api/listings/[id]` (только владелец)
-- `POST /api/listings/[id]/promote`
-
 - `GET /api/jobs?query=&category=&payType=&urgent=`
-- `POST /api/jobs` (только EMPLOYER)
 - `GET /api/jobs/[id]`
-- `PATCH /api/jobs/[id]` (только владелец)
+- `GET /api/tariffs`
+
+### Пользовательские
+
+- `POST /api/listings` (EXECUTOR)
+- `PATCH /api/listings/[id]` (owner/admin)
+- `POST /api/listings/[id]/promote`
+- `POST /api/jobs` (EMPLOYER)
+- `PATCH /api/jobs/[id]` (owner/admin)
 - `POST /api/jobs/[id]/promote`
 - `POST /api/jobs/[id]/complete`
-
-- `POST /api/messages` (универсально для listing/job)
-- `POST /api/reviews` (только EMPLOYER, после COMPLETED)
-- `POST /api/contacts/reveal` (только авторизованные)
-
-- `POST /api/profile` (create/update)
+- `POST /api/profile`
 - `PATCH /api/profile/status`
-- `PATCH /api/profile/experience`
-- `POST /api/role`
+- `POST /api/messages` (требует авторизацию)
+- `POST /api/reviews` (EMPLOYER)
+- `POST /api/contacts/reveal`
+- `GET /api/topups`
+- `POST /api/topups`
+- `POST /api/topups/[id]/confirm`
 
-## Что реализовано в этом милстоуне
+### Админские
 
-- JobPost (задания работодателей) с отдельной лентой и деталкой
-- Универсальные сообщения: к карточке исполнителя и к заданию работодателя
-- Телефон в профиле/задании + безопасный показ по кнопке с логированием просмотров
-- Отзывы (Review): рейтинг 1..5, список на карточке исполнителя, пагинация
-- Завершение задания работодателем (`COMPLETED`) и форма отзыва
-- Demo-продление размещения на 7 дней / 200₽ для Listing и JobPost
-- Автоскрытие просроченных публикаций из публичных лент
+- `GET /api/admin/users`
+- `PATCH /api/admin/users/[id]/ban`
+- `GET /api/admin/topups`
+- `POST /api/admin/topups/[id]/approve`
+- `POST /api/admin/topups/[id]/reject`
+- `GET /api/admin/settings`
+- `PATCH /api/admin/settings`
+- `GET /api/admin/tariffs`
+- `POST /api/admin/tariffs`
+- `PATCH /api/admin/tariffs/[id]`
+- `DELETE /api/admin/tariffs/[id]`
 
-## Seed
+## Seed данные
 
-`prisma/seed.ts` создаёт:
+`prisma/seed.ts` создает:
 
-- 12 исполнителей с профилями, телефонами и активными карточками
-- 2 работодателя, 6 заданий (ACTIVE/PAUSED/COMPLETED)
-- 2 отзыва по завершённому заданию
-- двусторонние сообщения (по `listingId` и `jobPostId`)
-- тарифы, включая базовый `7 дней / 200₽`
+- 12 исполнителей с анкетами и карточками
+- 2 работодателя и задания (ACTIVE/PAUSED/COMPLETED)
+- 1 админа (`admin@derbent.local`)
+- 3 тарифа (`BASIC`, `PREMIUM`, `GOLD`)
+- реквизиты для ручного пополнения
+- примеры заявок на пополнение с разными статусами
+- сообщения и отзывы
 
-## TODO: монетизация (после MVP)
+## TODO (следующий этап)
 
-- [ ] Реальная оплата (ЮKassa/CloudPayments)
-- [ ] Поднятие в топ и выделение карточек
-- [ ] История платежей и вебхуки
-- [ ] Лимиты по ролям/тарифам
-
-## Примечания
-
-- Площадка сейчас ограничена городом Дербент.
-- Готова архитектура для расширения по Дагестану (через enum `City`).
+- Подключение реальной оплаты (ЮKassa/CloudPayments)
+- История транзакций/баланса
+- Автоматические фоновые задачи (cron) вместо expire-on-read
+- Чаты с привязкой к пользователям и диалогам
