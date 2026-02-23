@@ -6,10 +6,17 @@ import {
   TARIFF_KIND_CARD_STYLES,
   TARIFF_KIND_LABELS
 } from "@/lib/constants";
+import { FavoriteToggle } from "@/components/common/favorite-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
-export function JobCard({ job }: { job: JobPostWithOwner }) {
+export function JobCard({
+  job,
+  isFavorite = false
+}: {
+  job: JobPostWithOwner;
+  isFavorite?: boolean;
+}) {
   const employerName = job.user.name?.trim() || "Работодатель";
   const employerLetter = employerName[0]?.toUpperCase() ?? "Р";
 
@@ -26,7 +33,10 @@ export function JobCard({ job }: { job: JobPostWithOwner }) {
           </span>
           <span className="truncate">{employerName}</span>
         </div>
-        <Badge className={TARIFF_KIND_BADGE_STYLES[job.activeTariffKind]}>{TARIFF_KIND_LABELS[job.activeTariffKind]}</Badge>
+        <div className="flex items-center gap-1">
+          <FavoriteToggle targetType="JOB" jobPostId={job.id} initialActive={isFavorite} />
+          <Badge className={TARIFF_KIND_BADGE_STYLES[job.activeTariffKind]}>{TARIFF_KIND_LABELS[job.activeTariffKind]}</Badge>
+        </div>
       </div>
 
       <div className="flex items-start justify-between gap-2">

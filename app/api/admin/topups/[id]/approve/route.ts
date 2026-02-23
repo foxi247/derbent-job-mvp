@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
+import { createNotificationSafe } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { topUpAdminActionSchema } from "@/lib/validations";
 
@@ -51,6 +52,14 @@ export async function POST(req: NextRequest, context: { params: { id: string } }
           adminNote: parsed.data.adminNote ?? null
         }
       });
+    });
+
+    await createNotificationSafe({
+      userId: result.userId,
+      type: "TOPUP_APPROVED",
+      title: "Пополнение подтверждено",
+      body: `Заявка на ${result.amountRub} ₽ подтверждена администратором.`,
+      link: "/profile"
     });
 
     return NextResponse.json(result);

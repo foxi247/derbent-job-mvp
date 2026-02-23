@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -5,6 +6,16 @@ import { ListingForm } from "@/components/forms/listing-form";
 import { ProfileForm } from "@/components/forms/profile-form";
 import { StatusToggles } from "@/components/forms/status-toggles";
 import { PromotionButton } from "@/components/forms/promotion-button";
+import { ensureExpiringPublicationNotifications } from "@/lib/notifications";
+
+const applicationStatusLabel: Record<string, string> = {
+  SENT: "Отправлен",
+  VIEWED: "Просмотрен",
+  ACCEPTED: "Принят",
+  REJECTED: "Отклонен",
+  COMPLETED: "Завершен",
+  CANCELED: "Отменен"
+};
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -16,7 +27,9 @@ export default async function DashboardPage() {
     redirect("/auth/role");
   }
 
-  const [profile, listings, tariffs, user] = await Promise.all([
+  await ensureExpiringPublicationNotifications(session.user.id, session.user.role);
+
+  const [profile, listings, applications, tariffs, user] = await Promise.all([
     prisma.profile.findUnique({ where: { userId: session.user.id } }),
     prisma.listing.findMany({
       where: { userId: session.user.id },
@@ -29,6 +42,22 @@ export default async function DashboardPage() {
         }
       },
       orderBy: { updatedAt: "desc" }
+    }),
+    prisma.jobApplication.findMany({
+      where: {
+        executorUserId: session.user.id
+      },
+      include: {
+        jobPost: {
+          select: {
+            id: true,
+            title: true,
+            category: true
+          }
+        }
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 100
     }),
     prisma.tariffPlan.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { priceRub: "asc" }] }),
     prisma.user.findUnique({ where: { id: session.user.id }, select: { isBanned: true } })
@@ -116,6 +145,28 @@ export default async function DashboardPage() {
               </article>
             );
           })
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Мои отклики</h2>
+        {applications.length === 0 ? (
+          <div className="surface p-4 text-sm text-muted-foreground">Вы еще не откликались на задания.</div>
+        ) : (
+          <div className="space-y-2">
+            {applications.map((application) => (
+              <article key={application.id} className="surface flex items-center justify-between gap-3 p-4 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium">{application.jobPost.title}</p>
+                  <p className="text-xs text-muted-foreground">{application.jobPost.category}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Статус: {applicationStatusLabel[application.status]}</p>
+                </div>
+                <Link href={`/jobs/${application.jobPost.id}`} className="text-xs font-medium text-primary hover:underline">
+                  Открыть
+                </Link>
+              </article>
+            ))}
+          </div>
         )}
       </section>
     </div>

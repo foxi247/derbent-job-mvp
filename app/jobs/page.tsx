@@ -1,13 +1,25 @@
+import { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getJobPosts } from "@/lib/jobs";
+import { prisma } from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/site-url";
 import { CATEGORIES, CITY_LABEL } from "@/lib/constants";
+import { SaveSearchMenu } from "@/components/common/save-search-menu";
 import { JobCard } from "@/components/jobs/job-card";
 import { JobSearchFilters } from "@/components/forms/job-search-filters";
 import { Button } from "@/components/ui/button";
 
 type JobsPageProps = {
   searchParams: Record<string, string | string[] | undefined>;
+};
+
+export const metadata: Metadata = {
+  title: "Задания в Дербенте",
+  description: "Лента заданий от работодателей в Дербенте.",
+  alternates: {
+    canonical: `${getBaseUrl()}/jobs`
+  }
 };
 
 export default async function JobsPage({ searchParams }: JobsPageProps) {
@@ -27,6 +39,30 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
     dbUnavailable = true;
     console.error("Failed to fetch jobs", error);
   }
+
+  const favoriteJobIds = session?.user
+    ? new Set(
+        (
+          await prisma.favorite.findMany({
+            where: {
+              userId: session.user.id,
+              targetType: "JOB",
+              jobPostId: { in: jobs.map((item) => item.id) }
+            },
+            select: { jobPostId: true }
+          })
+        )
+          .map((item) => item.jobPostId)
+          .filter(Boolean) as string[]
+      )
+    : new Set<string>();
+
+  const saveSearchQuery = {
+    ...(query ? { query } : {}),
+    ...(category ? { category } : {}),
+    ...(payType ? { payType } : {}),
+    ...(typeof urgent === "boolean" ? { urgent: String(urgent) } : {})
+  };
 
   const ctaHref = session?.user?.role === "EMPLOYER" ? "/dashboard-employer" : "/auth/signin";
 
@@ -78,7 +114,10 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
       <section id="jobs-list" className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Лента заданий</h2>
-          <span className="text-sm text-muted-foreground">Найдено: {jobs.length}</span>
+          <div className="flex items-center gap-2">
+            {session?.user && <SaveSearchMenu type="JOB" queryParams={saveSearchQuery} />}
+            <span className="text-sm text-muted-foreground">Найдено: {jobs.length}</span>
+          </div>
         </div>
 
         {jobs.length === 0 ? (
@@ -86,7 +125,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {jobs.map((job) => (
-              <JobCard key={job.id} job={job} />
+              <JobCard key={job.id} job={job} isFavorite={favoriteJobIds.has(job.id)} />
             ))}
           </div>
         )}

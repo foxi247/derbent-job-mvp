@@ -73,6 +73,39 @@ type TariffDraft = {
   sortOrder: string;
 };
 
+type AdminReport = {
+  id: string;
+  targetType: "LISTING" | "JOB" | "USER";
+  reason: string;
+  text: string | null;
+  status: "OPEN" | "RESOLVED";
+  createdAt: string;
+  reporter: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  };
+  targetUser: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    role: "EXECUTOR" | "EMPLOYER" | "ADMIN";
+    isBanned: boolean;
+  } | null;
+  listing: {
+    id: string;
+    title: string;
+    status: "ACTIVE" | "PAUSED";
+    userId: string;
+  } | null;
+  jobPost: {
+    id: string;
+    title: string;
+    status: "ACTIVE" | "PAUSED" | "COMPLETED";
+    userId: string;
+  } | null;
+};
+
 const topUpStatusLabel = {
   PENDING: "Ожидает",
   APPROVED: "Подтверждено",
@@ -98,11 +131,13 @@ export function AdminPanel() {
   const [settings, setSettings] = useState<AdminSettings>(null);
   const [tariffs, setTariffs] = useState<TariffPlan[]>([]);
   const [tariffDrafts, setTariffDrafts] = useState<Record<string, TariffDraft>>({});
+  const [reports, setReports] = useState<AdminReport[]>([]);
 
   const [userQuery, setUserQuery] = useState("");
   const [userRole, setUserRole] = useState("");
   const [userBanned, setUserBanned] = useState("");
   const [topUpStatusFilter, setTopUpStatusFilter] = useState("");
+  const [reportStatusFilter, setReportStatusFilter] = useState("");
 
   const [newTariff, setNewTariff] = useState<TariffDraft>({
     name: "",
@@ -128,7 +163,7 @@ export function AdminPanel() {
   const pendingTopUps = useMemo(() => topUps.filter((item) => item.status === "PENDING").length, [topUps]);
 
   useEffect(() => {
-    void Promise.all([loadUsers(), loadTopUps(), loadSettings(), loadTariffs()]);
+    void Promise.all([loadUsers(), loadTopUps(), loadReports(), loadSettings(), loadTariffs()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -154,6 +189,17 @@ export function AdminPanel() {
 
     const data = await response.json();
     setTopUps(data);
+  }
+
+  async function loadReports() {
+    const params = new URLSearchParams();
+    if (reportStatusFilter) params.set("status", reportStatusFilter);
+
+    const response = await fetch(`/api/admin/reports?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) return;
+
+    const data = await response.json();
+    setReports(data);
   }
 
   async function loadSettings() {
@@ -227,6 +273,32 @@ export function AdminPanel() {
 
     const payload = await response.json().catch(() => null);
     setMessage(payload?.error ?? "Не удалось обработать заявку");
+  }
+
+  async function resolveReport(id: string, options?: { banTargetUser?: boolean; pauseTargetPublication?: boolean }) {
+    setBusy(true);
+    setMessage("");
+
+    const response = await fetch(`/api/admin/reports/${id}/resolve`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: "RESOLVED",
+        banTargetUser: options?.banTargetUser ?? false,
+        pauseTargetPublication: options?.pauseTargetPublication ?? false
+      })
+    });
+
+    setBusy(false);
+
+    if (response.ok) {
+      setMessage("Жалоба обработана");
+      await Promise.all([loadReports(), loadUsers()]);
+      return;
+    }
+
+    const payload = await response.json().catch(() => null);
+    setMessage(payload?.error ?? "Не удалось обработать жалобу");
   }
 
   async function saveSettings(e: FormEvent) {
@@ -467,6 +539,75 @@ export function AdminPanel() {
             </article>
           ))}
           {topUps.length === 0 && <p className="text-sm text-muted-foreground">Заявок нет.</p>}
+        </div>
+      </section>
+
+      <section className="surface space-y-3 p-4 md:p-5">
+        <h2 className="text-lg font-semibold">Жалобы</h2>
+
+        <div className="flex items-center gap-2">
+          <Select value={reportStatusFilter} onChange={(event) => setReportStatusFilter(event.target.value)}>
+            <option value="">Все статусы</option>
+            <option value="OPEN">Открытые</option>
+            <option value="RESOLVED">Решенные</option>
+          </Select>
+          <Button type="button" variant="outline" onClick={() => void loadReports()} disabled={busy}>
+            Применить
+          </Button>
+        </div>
+
+        <div className="space-y-2">
+          {reports.map((report) => (
+            <article key={report.id} className="rounded-xl border bg-background/70 p-3 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium">
+                    {report.targetType} • {report.status}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    От: {report.reporter.name ?? "Пользователь"} ({report.reporter.email ?? "без email"})
+                  </p>
+                  <p className="text-xs text-muted-foreground">Причина: {report.reason}</p>
+                  {report.text && <p className="mt-1 text-xs">Комментарий: {report.text}</p>}
+                  {report.listing && <p className="mt-1 text-xs">Анкета: {report.listing.title} • {report.listing.status}</p>}
+                  {report.jobPost && <p className="mt-1 text-xs">Задание: {report.jobPost.title} • {report.jobPost.status}</p>}
+                  {report.targetUser && (
+                    <p className="mt-1 text-xs">
+                      Пользователь: {report.targetUser.name ?? "Без имени"} • {report.targetUser.role} •{" "}
+                      {report.targetUser.isBanned ? "заблокирован" : "активен"}
+                    </p>
+                  )}
+                </div>
+
+                {report.status === "OPEN" && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" onClick={() => void resolveReport(report.id)} disabled={busy}>
+                      Решить
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void resolveReport(report.id, { pauseTargetPublication: true })}
+                      disabled={busy}
+                    >
+                      Снять с публикации
+                    </Button>
+                    {report.targetUser && report.targetUser.role !== "ADMIN" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void resolveReport(report.id, { banTargetUser: true })}
+                        disabled={busy}
+                      >
+                        Бан пользователя
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+          {reports.length === 0 && <p className="text-sm text-muted-foreground">Жалоб нет.</p>}
         </div>
       </section>
 

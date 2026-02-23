@@ -6,10 +6,17 @@ import {
   TARIFF_KIND_CARD_STYLES,
   TARIFF_KIND_LABELS
 } from "@/lib/constants";
+import { FavoriteToggle } from "@/components/common/favorite-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
-export function ListingCard({ listing }: { listing: ListingWithProfile }) {
+export function ListingCard({
+  listing,
+  isFavorite = false
+}: {
+  listing: ListingWithProfile;
+  isFavorite?: boolean;
+}) {
   const profile = listing.user.profile;
   const workerName = listing.user.name?.trim() || "Исполнитель";
   const avatarLetter = workerName[0]?.toUpperCase() ?? "И";
@@ -27,9 +34,12 @@ export function ListingCard({ listing }: { listing: ListingWithProfile }) {
           </span>
           <span className="truncate">{workerName}</span>
         </div>
-        <Badge className={TARIFF_KIND_BADGE_STYLES[listing.activeTariffKind]}>
-          {TARIFF_KIND_LABELS[listing.activeTariffKind]}
-        </Badge>
+        <div className="flex items-center gap-1">
+          <FavoriteToggle targetType="LISTING" listingId={listing.id} initialActive={isFavorite} />
+          <Badge className={TARIFF_KIND_BADGE_STYLES[listing.activeTariffKind]}>
+            {TARIFF_KIND_LABELS[listing.activeTariffKind]}
+          </Badge>
+        </div>
       </div>
 
       <div className="flex items-start justify-between gap-2">

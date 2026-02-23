@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { getListings } from "@/lib/listings";
 import { prisma } from "@/lib/prisma";
 import { assertNotBanned } from "@/lib/access";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 import { publishListingByTariff } from "@/lib/tariffs";
 import { listingQuerySchema, listingSchema } from "@/lib/validations";
 
@@ -57,6 +58,26 @@ export async function POST(req: NextRequest) {
     await assertNotBanned(session.user.id);
   } catch {
     return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+  }
+
+  const rateLimit = await checkRateLimit({
+    action: "listing_create",
+    key: buildRateLimitKey(req, session.user.id),
+    limit: 10,
+    windowMs: 60 * 1000,
+    userId: session.user.id
+  });
+
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { error: "Слишком много публикаций. Попробуйте чуть позже." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds)
+        }
+      }
+    );
   }
 
   const body = await req.json();

@@ -1,13 +1,25 @@
+import { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getListings } from "@/lib/listings";
+import { prisma } from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/site-url";
 import { CATEGORIES, CITY_LABEL } from "@/lib/constants";
+import { SaveSearchMenu } from "@/components/common/save-search-menu";
 import { ListingCard } from "@/components/listing/listing-card";
 import { SearchFilters } from "@/components/forms/search-filters";
 import { Button } from "@/components/ui/button";
 
 type HomeProps = {
   searchParams: Record<string, string | string[] | undefined>;
+};
+
+export const metadata: Metadata = {
+  title: "Исполнители в Дербенте",
+  description: "Поиск исполнителей и подработки в Дербенте.",
+  alternates: {
+    canonical: `${getBaseUrl()}/`
+  }
 };
 
 export default async function HomePage({ searchParams }: HomeProps) {
@@ -38,6 +50,33 @@ export default async function HomePage({ searchParams }: HomeProps) {
     dbUnavailable = true;
     console.error("Failed to fetch listings", error);
   }
+
+  const favoriteListingIds = session?.user
+    ? new Set(
+        (
+          await prisma.favorite.findMany({
+            where: {
+              userId: session.user.id,
+              targetType: "LISTING",
+              listingId: { in: listings.map((item) => item.id) }
+            },
+            select: { listingId: true }
+          })
+        )
+          .map((item) => item.listingId)
+          .filter(Boolean) as string[]
+      )
+    : new Set<string>();
+
+  const saveSearchQuery = {
+    ...(query ? { query } : {}),
+    ...(category ? { category } : {}),
+    ...(priceType ? { priceType } : {}),
+    ...(typeof online === "boolean" ? { online: String(online) } : {}),
+    ...(typeof urgent === "boolean" ? { urgent: String(urgent) } : {}),
+    ...(typeof experienceMin === "number" ? { experienceMin: String(experienceMin) } : {}),
+    ...(typeof experienceMax === "number" ? { experienceMax: String(experienceMax) } : {})
+  };
 
   const ctaHref = session?.user?.role === "EXECUTOR" ? "/dashboard" : "/auth/signin";
 
@@ -89,7 +128,10 @@ export default async function HomePage({ searchParams }: HomeProps) {
       <section id="listings" className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Исполнители</h2>
-          <span className="text-sm text-muted-foreground">Найдено: {listings.length}</span>
+          <div className="flex items-center gap-2">
+            {session?.user && <SaveSearchMenu type="LISTING" queryParams={saveSearchQuery} />}
+            <span className="text-sm text-muted-foreground">Найдено: {listings.length}</span>
+          </div>
         </div>
 
         {listings.length === 0 ? (
@@ -97,7 +139,7 @@ export default async function HomePage({ searchParams }: HomeProps) {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {listings.map((item) => (
-              <ListingCard key={item.id} listing={item} />
+              <ListingCard key={item.id} listing={item} isFavorite={favoriteListingIds.has(item.id)} />
             ))}
           </div>
         )}

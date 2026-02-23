@@ -1,11 +1,24 @@
 import { z } from "zod";
 
 const nullableMoney = z.number().nonnegative().nullable();
+const hasLinkPattern = /(https?:\/\/|www\.)/i;
+
+function textWithoutLinks(value: string) {
+  return !hasLinkPattern.test(value);
+}
+
+function safeText(min: number, max: number) {
+  return z
+    .string()
+    .min(min)
+    .max(max)
+    .refine(textWithoutLinks, { message: "Ссылки в тексте запрещены" });
+}
 
 export const listingSchema = z.object({
   title: z.string().min(3).max(120),
   category: z.string().min(2).max(60),
-  description: z.string().min(10).max(2000),
+  description: safeText(10, 2000),
   priceType: z.enum(["PER_SQM", "PER_HOUR", "FIXED", "NEGOTIABLE"]),
   priceValue: nullableMoney,
   district: z.string().max(120).optional().nullable(),
@@ -18,7 +31,7 @@ export const listingPatchSchema = listingSchema.partial();
 export const jobPostSchema = z.object({
   title: z.string().min(3).max(120),
   category: z.string().min(2).max(60),
-  description: z.string().min(10).max(2000),
+  description: safeText(10, 2000),
   payType: z.enum(["PER_HOUR", "FIXED", "NEGOTIABLE"]),
   payValue: nullableMoney,
   district: z.string().max(120).optional().nullable(),
@@ -53,7 +66,7 @@ export const messageSchema = z
     jobPostId: z.string().cuid().optional(),
     senderName: z.string().min(2).max(120),
     senderContact: z.string().min(3).max(120),
-    text: z.string().min(5).max(1500)
+    text: safeText(5, 1500)
   })
   .refine((value) => Number(Boolean(value.listingId)) + Number(Boolean(value.jobPostId)) === 1, {
     message: "Нужно указать либо listingId, либо jobPostId"
@@ -148,4 +161,86 @@ export const adminUserQuerySchema = z.object({
 
 export const adminTopUpQuerySchema = z.object({
   status: z.enum(["PENDING", "APPROVED", "REJECTED", "EXPIRED"]).optional()
+});
+
+export const jobApplicationCreateSchema = z.object({
+  message: z
+    .string()
+    .max(600)
+    .optional()
+    .nullable()
+    .refine((value) => (value ? textWithoutLinks(value) : true), {
+      message: "Ссылки в сообщении запрещены"
+    })
+});
+
+export const jobApplicationStatusSchema = z.object({
+  status: z.enum(["VIEWED", "ACCEPTED", "REJECTED", "COMPLETED", "CANCELED"])
+});
+
+export const jobApplicationQuerySchema = z.object({
+  scope: z.enum(["executor", "employer"]).optional(),
+  status: z.enum(["SENT", "VIEWED", "ACCEPTED", "REJECTED", "COMPLETED", "CANCELED"]).optional()
+});
+
+export const favoriteMutationSchema = z
+  .object({
+    targetType: z.enum(["LISTING", "JOB"]),
+    listingId: z.string().cuid().optional(),
+    jobPostId: z.string().cuid().optional()
+  })
+  .refine((value) => Number(Boolean(value.listingId)) + Number(Boolean(value.jobPostId)) === 1, {
+    message: "Нужно указать либо listingId, либо jobPostId"
+  })
+  .refine(
+    (value) =>
+      (value.targetType === "LISTING" && Boolean(value.listingId)) ||
+      (value.targetType === "JOB" && Boolean(value.jobPostId)),
+    { message: "targetType не соответствует переданному объекту" }
+  );
+
+export const favoriteQuerySchema = z.object({
+  targetType: z.enum(["LISTING", "JOB"]).optional()
+});
+
+export const savedSearchCreateSchema = z.object({
+  type: z.enum(["LISTING", "JOB"]),
+  queryParams: z.record(z.string(), z.string())
+});
+
+export const notificationQuerySchema = z.object({
+  unreadOnly: z.enum(["true", "false"]).optional()
+});
+
+export const reportCreateSchema = z
+  .object({
+    targetType: z.enum(["LISTING", "JOB", "USER"]),
+    listingId: z.string().cuid().optional(),
+    jobPostId: z.string().cuid().optional(),
+    targetUserId: z.string().cuid().optional(),
+    reason: z.string().min(2).max(120),
+    text: safeText(3, 1000).optional().nullable()
+  })
+  .refine(
+    (value) =>
+      (value.targetType === "LISTING" && Boolean(value.listingId)) ||
+      (value.targetType === "JOB" && Boolean(value.jobPostId)) ||
+      (value.targetType === "USER" && Boolean(value.targetUserId)),
+    { message: "Неверная цель жалобы" }
+  );
+
+export const adminReportQuerySchema = z.object({
+  status: z.enum(["OPEN", "RESOLVED"]).optional()
+});
+
+export const adminResolveReportSchema = z.object({
+  status: z.enum(["OPEN", "RESOLVED"]).default("RESOLVED"),
+  banTargetUser: z.boolean().optional().default(false),
+  pauseTargetPublication: z.boolean().optional().default(false)
+});
+
+export const supportRequestSchema = z.object({
+  name: z.string().min(2).max(120),
+  contact: z.string().min(3).max(120),
+  text: safeText(10, 1200)
 });

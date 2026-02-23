@@ -1,10 +1,21 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureExpiringPublicationNotifications } from "@/lib/notifications";
+import { ApplicationStatusActions } from "@/components/forms/application-status-actions";
 import { JobForm } from "@/components/forms/job-form";
 import { PromotionButton } from "@/components/forms/promotion-button";
 import { CompleteJobButton } from "@/components/forms/complete-job-button";
 import { ReviewForm } from "@/components/forms/review-form";
+
+const applicationStatusLabel: Record<string, string> = {
+  SENT: "Отправлен",
+  VIEWED: "Просмотрен",
+  ACCEPTED: "Принят",
+  REJECTED: "Отклонен",
+  COMPLETED: "Завершен",
+  CANCELED: "Отменен"
+};
 
 export default async function EmployerDashboardPage() {
   const session = await auth();
@@ -16,7 +27,9 @@ export default async function EmployerDashboardPage() {
     redirect("/auth/role");
   }
 
-  const [jobPosts, executors, tariffs, user] = await Promise.all([
+  await ensureExpiringPublicationNotifications(session.user.id, session.user.role);
+
+  const [jobPosts, applications, executors, tariffs, user] = await Promise.all([
     prisma.jobPost.findMany({
       where: { userId: session.user.id },
       include: {
@@ -42,6 +55,32 @@ export default async function EmployerDashboardPage() {
         }
       },
       orderBy: { updatedAt: "desc" }
+    }),
+    prisma.jobApplication.findMany({
+      where: { employerUserId: session.user.id },
+      include: {
+        executor: {
+          select: {
+            id: true,
+            name: true,
+            profile: {
+              select: {
+                experienceYears: true,
+                workCategory: true
+              }
+            }
+          }
+        },
+        jobPost: {
+          select: {
+            id: true,
+            title: true,
+            category: true
+          }
+        }
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 200
     }),
     prisma.user.findMany({
       where: { role: "EXECUTOR", isBanned: false },
@@ -70,6 +109,33 @@ export default async function EmployerDashboardPage() {
       </section>
 
       <JobForm tariffs={tariffs} />
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Отклики</h2>
+        {applications.length === 0 ? (
+          <div className="surface p-4 text-sm text-muted-foreground">По вашим заданиям пока нет откликов.</div>
+        ) : (
+          <div className="space-y-2">
+            {applications.map((application) => (
+              <article key={application.id} className="surface flex items-start justify-between gap-3 p-4 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium">{application.jobPost.title}</p>
+                  <p className="text-xs text-muted-foreground">{application.jobPost.category}</p>
+                  <p className="mt-1">
+                    {application.executor.name ?? "Исполнитель"} • {application.executor.profile?.workCategory ?? "Без категории"} • стаж{" "}
+                    {application.executor.profile?.experienceYears ?? 0} лет
+                  </p>
+                  {application.message && <p className="mt-1 text-xs text-muted-foreground">Сообщение: {application.message}</p>}
+                  <p className="mt-1 text-xs text-muted-foreground">Статус: {applicationStatusLabel[application.status]}</p>
+                </div>
+                {(application.status === "SENT" || application.status === "VIEWED") && (
+                  <ApplicationStatusActions applicationId={application.id} />
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Мои задания</h2>

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { messageSchema } from "@/lib/validations";
 import { assertNotBanned } from "@/lib/access";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -14,6 +15,26 @@ export async function POST(req: NextRequest) {
     await assertNotBanned(session.user.id);
   } catch {
     return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+  }
+
+  const rateLimit = await checkRateLimit({
+    action: "message_post",
+    key: buildRateLimitKey(req, session.user.id),
+    limit: 20,
+    windowMs: 60 * 1000,
+    userId: session.user.id
+  });
+
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { error: "Слишком много сообщений. Попробуйте чуть позже." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds)
+        }
+      }
+    );
   }
 
   const body = await req.json();
@@ -31,9 +52,31 @@ export async function POST(req: NextRequest) {
   }
 
   if (parsed.data.jobPostId) {
-    const exists = await prisma.jobPost.findUnique({ where: { id: parsed.data.jobPostId }, select: { id: true } });
-    if (!exists) {
+    const jobPost = await prisma.jobPost.findUnique({
+      where: { id: parsed.data.jobPostId },
+      select: { id: true, userId: true }
+    });
+    if (!jobPost) {
       return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
+    }
+
+    if (session.user.role === "EXECUTOR") {
+      const application = await prisma.jobApplication.findUnique({
+        where: {
+          jobPostId_executorUserId: {
+            jobPostId: jobPost.id,
+            executorUserId: session.user.id
+          }
+        },
+        select: { status: true }
+      });
+
+      if (!application || (application.status !== "ACCEPTED" && application.status !== "COMPLETED")) {
+        return NextResponse.json(
+          { error: "Переписка по заданию доступна после принятого отклика." },
+          { status: 403 }
+        );
+      }
     }
   }
 

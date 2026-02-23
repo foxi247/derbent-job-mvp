@@ -1,12 +1,17 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { maskPhone } from "@/lib/phone";
-import { PRICE_TYPE_LABELS } from "@/lib/constants";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { auth } from "@/auth";
+import { FavoriteToggle } from "@/components/common/favorite-toggle";
 import { ContactReveal } from "@/components/forms/contact-reveal";
 import { MessageForm } from "@/components/forms/message-form";
+import { ReportMenu } from "@/components/forms/report-menu";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PRICE_TYPE_LABELS } from "@/lib/constants";
+import { maskPhone } from "@/lib/phone";
+import { prisma } from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/site-url";
 
 type ListingPageProps = {
   params: {
@@ -14,7 +19,40 @@ type ListingPageProps = {
   };
 };
 
+export async function generateMetadata({ params }: ListingPageProps): Promise<Metadata> {
+  const listing = await prisma.listing.findUnique({
+    where: { id: params.id },
+    select: { id: true, title: true, description: true, category: true }
+  });
+
+  if (!listing) {
+    return {
+      title: "Анкета не найдена",
+      alternates: { canonical: `${getBaseUrl()}/listing/${params.id}` }
+    };
+  }
+
+  const title = `${listing.title} - ${listing.category} в Дербенте`;
+  const description = listing.description.slice(0, 180);
+  const canonical = `${getBaseUrl()}/listing/${listing.id}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: "article",
+      locale: "ru_RU"
+    }
+  };
+}
+
 export default async function ListingPage({ params }: ListingPageProps) {
+  const session = await auth();
+
   const listing = await prisma.listing.findUnique({
     where: { id: params.id },
     include: {
@@ -44,7 +82,7 @@ export default async function ListingPage({ params }: ListingPageProps) {
     notFound();
   }
 
-  const [reviewStats, reviews] = await Promise.all([
+  const [reviewStats, reviews, favorite] = await Promise.all([
     prisma.review.aggregate({
       where: { executorUserId: listing.userId },
       _avg: { rating: true },
@@ -58,7 +96,18 @@ export default async function ListingPage({ params }: ListingPageProps) {
       },
       orderBy: { createdAt: "desc" },
       take: 10
-    })
+    }),
+    session?.user
+      ? prisma.favorite.findUnique({
+          where: {
+            userId_listingId: {
+              userId: session.user.id,
+              listingId: listing.id
+            }
+          },
+          select: { id: true }
+        })
+      : Promise.resolve(null)
   ]);
 
   const profile = listing.user.profile;
@@ -68,9 +117,15 @@ export default async function ListingPage({ params }: ListingPageProps) {
 
   return (
     <div className="space-y-6">
-      <Button asChild variant="outline" size="sm">
-        <Link href="/">Назад к исполнителям</Link>
-      </Button>
+      <div className="flex items-center justify-between gap-2">
+        <Button asChild variant="outline" size="sm">
+          <Link href="/">Назад к исполнителям</Link>
+        </Button>
+        <div className="flex items-center gap-1">
+          <FavoriteToggle targetType="LISTING" listingId={listing.id} initialActive={Boolean(favorite)} />
+          {session?.user && <ReportMenu targetType="LISTING" listingId={listing.id} />}
+        </div>
+      </div>
 
       <section className="surface space-y-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">

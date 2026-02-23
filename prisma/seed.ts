@@ -416,6 +416,12 @@ function addMinutes(minutes: number) {
 }
 
 async function main() {
+  await prisma.rateLimitLog.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.report.deleteMany();
+  await prisma.savedSearch.deleteMany();
+  await prisma.favorite.deleteMany();
+  await prisma.jobApplication.deleteMany();
   await prisma.contactView.deleteMany();
   await prisma.review.deleteMany();
   await prisma.message.deleteMany();
@@ -727,6 +733,114 @@ async function main() {
         expiresAt: addDays(-1)
       }
     ]
+  });
+
+  const activeJobs = createdJobs.filter((job) => job.status === JobPostStatus.ACTIVE);
+  if (activeJobs.length > 0) {
+    const firstJob = activeJobs[0];
+    const secondJob = activeJobs[1] ?? activeJobs[0];
+    const firstExecutor = executorUsers[0];
+    const secondExecutor = executorUsers[1];
+
+    await prisma.jobApplication.createMany({
+      data: [
+        {
+          jobPostId: firstJob.id,
+          employerUserId: firstJob.userId,
+          executorUserId: firstExecutor.id,
+          status: "SENT",
+          message: "Готов выйти завтра с утра."
+        },
+        {
+          jobPostId: secondJob.id,
+          employerUserId: secondJob.userId,
+          executorUserId: secondExecutor.id,
+          status: "ACCEPTED",
+          message: "Есть опыт, могу работать в сменном графике."
+        }
+      ],
+      skipDuplicates: true
+    });
+  }
+
+  await prisma.favorite.createMany({
+    data: [
+      {
+        userId: employerOne.id,
+        targetType: "LISTING",
+        listingId: listingIds[0]
+      },
+      {
+        userId: executorUsers[0].id,
+        targetType: "JOB",
+        jobPostId: createdJobs[0]?.id
+      }
+    ].filter((item) => item.listingId || item.jobPostId) as Prisma.FavoriteCreateManyInput[],
+    skipDuplicates: true
+  });
+
+  await prisma.savedSearch.createMany({
+    data: [
+      {
+        userId: employerOne.id,
+        type: "LISTING",
+        queryParams: {
+          query: "уборка",
+          category: "Уборка",
+          online: "true"
+        }
+      },
+      {
+        userId: executorUsers[0].id,
+        type: "JOB",
+        queryParams: {
+          category: "Курьер",
+          payType: "FIXED"
+        }
+      }
+    ]
+  });
+
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: employerOne.id,
+        type: "APPLICATION_NEW",
+        title: "Новый отклик",
+        body: "По вашему заданию пришел новый отклик.",
+        link: "/dashboard-employer"
+      },
+      {
+        userId: executorUsers[0].id,
+        type: "TOPUP_APPROVED",
+        title: "Пополнение подтверждено",
+        body: "Баланс успешно пополнен.",
+        link: "/dashboard"
+      }
+    ]
+  });
+
+  await prisma.report.createMany({
+    data: [
+      {
+        reporterUserId: employerOne.id,
+        targetType: "LISTING",
+        listingId: listingIds[1],
+        targetUserId: executorUsers[1].id,
+        reason: "Недостоверная информация",
+        text: "Указан неверный опыт работы.",
+        status: "OPEN"
+      },
+      {
+        reporterUserId: executorUsers[0].id,
+        targetType: "JOB",
+        jobPostId: createdJobs[0]?.id,
+        targetUserId: employerOne.id,
+        reason: "Спам",
+        text: "Похоже на дублирующееся задание.",
+        status: "OPEN"
+      }
+    ].filter((item) => item.listingId || item.jobPostId) as Prisma.ReportCreateManyInput[]
   });
 }
 

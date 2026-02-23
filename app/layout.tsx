@@ -1,9 +1,13 @@
-﻿import Link from "next/link";
+﻿import type { Metadata } from "next";
+import Link from "next/link";
 import { Manrope } from "next/font/google";
 import { auth, signOut } from "@/auth";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { NotificationsBell } from "@/components/common/notifications-bell";
 import { WalletBalanceWidget } from "@/components/forms/wallet-balance-widget";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { CITY_LABEL } from "@/lib/constants";
+import { prisma } from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/site-url";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -12,9 +16,23 @@ const manrope = Manrope({
   weight: ["400", "500", "600", "700"]
 });
 
-export const metadata = {
-  title: "Работа/Подработка - Дербент",
-  description: "Платформа поиска исполнителей и заданий в Дербенте"
+export const metadata: Metadata = {
+  metadataBase: new URL(getBaseUrl()),
+  title: {
+    default: "Работа/Подработка - Дербент",
+    template: "%s | Работа/Подработка"
+  },
+  description: "Платформа исполнителей и заданий в Дербенте",
+  alternates: {
+    canonical: "/"
+  },
+  openGraph: {
+    title: "Работа/Подработка - Дербент",
+    description: "Исполнители и задания в Дербенте",
+    locale: "ru_RU",
+    type: "website",
+    url: "/"
+  }
 };
 
 function getCabinetHref(role: "EXECUTOR" | "EMPLOYER" | "ADMIN" | undefined) {
@@ -27,6 +45,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const session = await auth();
   const role = session?.user?.role;
   const cabinetHref = getCabinetHref(role);
+
+  const unreadCount = session?.user
+    ? await prisma.notification.count({
+        where: {
+          userId: session.user.id,
+          isRead: false
+        }
+      })
+    : 0;
 
   return (
     <html lang="ru">
@@ -47,6 +74,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/jobs" className="rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground">
                 Задания
               </Link>
+              {session?.user && (
+                <Link href="/favorites" className="rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground">
+                  Избранное
+                </Link>
+              )}
               {role === "ADMIN" && (
                 <Link href="/admin" className="rounded-md px-3 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground">
                   Админка
@@ -57,6 +89,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="flex items-center gap-2">
               {session?.user ? (
                 <>
+                  <NotificationsBell unreadCount={unreadCount} />
                   <WalletBalanceWidget initialBalanceRub={session.user.balanceRub} />
 
                   <Button asChild size="sm" className="hidden sm:inline-flex">
@@ -72,12 +105,24 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     >
                       Меню
                     </summary>
-                    <div className="absolute right-0 z-50 mt-2 w-44 rounded-xl border bg-white p-2 shadow-lg">
+                    <div className="absolute right-0 z-50 mt-2 w-52 rounded-xl border bg-white p-2 shadow-lg">
                       <Link href={cabinetHref} className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
                         Кабинет
                       </Link>
                       <Link href="/profile" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
                         Профиль
+                      </Link>
+                      <Link href="/notifications" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
+                        Уведомления
+                      </Link>
+                      <Link href="/favorites" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
+                        Избранное
+                      </Link>
+                      <Link href="/saved-searches" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
+                        Сохраненные поиски
+                      </Link>
+                      <Link href="/how-it-works" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
+                        Как это работает
                       </Link>
                       {role === "ADMIN" && (
                         <Link href="/admin" className="block rounded-md px-3 py-2 text-sm hover:bg-secondary">
@@ -116,6 +161,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   Задания
                 </Link>
                 {session?.user && (
+                  <Link href="/favorites" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
+                    Избранное
+                  </Link>
+                )}
+                {session?.user && (
+                  <Link href="/saved-searches" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
+                    Сохраненные поиски
+                  </Link>
+                )}
+                {session?.user && (
+                  <Link href="/notifications" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
+                    Уведомления
+                  </Link>
+                )}
+                {session?.user && (
                   <Link href={cabinetHref} className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
                     Кабинет
                   </Link>
@@ -125,6 +185,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     Профиль
                   </Link>
                 )}
+                <Link href="/support" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
+                  Поддержка
+                </Link>
                 {role === "ADMIN" && (
                   <Link href="/admin" className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
                     Админка
@@ -148,8 +211,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </header>
 
         <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">{children}</main>
+        <footer className="border-t bg-white/70">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-4 text-xs text-muted-foreground md:px-6">
+            <Link href="/how-it-works" className="hover:text-foreground">
+              Как это работает
+            </Link>
+            <Link href="/privacy" className="hover:text-foreground">
+              Конфиденциальность
+            </Link>
+            <Link href="/terms" className="hover:text-foreground">
+              Соглашение
+            </Link>
+            <Link href="/support" className="hover:text-foreground">
+              Поддержка
+            </Link>
+          </div>
+        </footer>
       </body>
     </html>
   );
 }
-

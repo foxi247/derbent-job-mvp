@@ -1,102 +1,67 @@
-# Работа/Подработка - Derbent MVP
+﻿# Работа/Подработка — Derbent Job MVP
 
-Двусторонняя платформа для Дербента: исполнители публикуют анкеты, работодатели публикуют задания.
+Двусторонняя платформа для Дербента:
+- исполнители публикуют анкеты услуг
+- работодатели публикуют задания
+- есть отклики, сообщения, отзывы, избранное, уведомления, тарифы и ручное пополнение баланса
 
 ## Стек
-
 - Next.js 14 (App Router) + TypeScript
 - TailwindCSS + shadcn/ui
-- Next.js Route Handlers (API)
-- PostgreSQL + Prisma ORM
-- NextAuth/Auth.js (Email magic link + Google + Yandex)
+- Next.js Route Handlers
+- PostgreSQL + Prisma
+- NextAuth/Auth.js (Email + Google + Yandex + demo credentials для dev)
 
-## Что реализовано
-
+## Основные возможности
 - Роли: `EXECUTOR`, `EMPLOYER`, `ADMIN`
-- Лента исполнителей (`/`) и лента заданий (`/jobs`)
+- Ленты: `/` (исполнители), `/jobs` (задания)
 - Детальные страницы: `/listing/[id]`, `/jobs/[id]`
-- Кабинет исполнителя: `/dashboard`
-- Кабинет работодателя: `/dashboard-employer`
-- Профиль: `/profile`
-- Админ-панель: `/admin`
-
-### Баланс и ручные пополнения (MVP)
-
-- У пользователя есть баланс `balanceRub`
-- Пользователь создает заявку на пополнение (`TopUpRequest`) на 30 минут
-- Показываются реквизиты из `AdminSettings`
-- Кнопка «Я оплатил» сохраняет `proofText`
-- Админ подтверждает/отклоняет заявку
-- При подтверждении баланс увеличивается вручную админом
-
-### Тарифы и публикация
-
-- Тарифы настраиваются в админке (`TariffPlan`): `BASIC` / `PREMIUM` / `GOLD`
-- При публикации/продлении:
-  - проверяется баланс
-  - списывается стоимость тарифа
-  - создается `ListingTariff`
-  - `expiresAt` у объявления обновляется
-- В публичных выдачах показываются только `ACTIVE` и не истекшие
-- Истекшие карточки не удаляются, а скрываются
-
-### Premium/Gold выделения
-
-- `BASIC`: обычная карточка
-- `PREMIUM`: акцентное оформление + бейдж
-- `GOLD`: бейдж + приоритет сортировки
-- Сортировка в выдаче: `GOLD -> PREMIUM -> BASIC`, затем `updatedAt desc`
-
-## Prisma модели (новое в этом этапе)
-
-- `User`: `balanceRub`, `isBanned`, `bannedAt`, роль `ADMIN`
-- `Profile`: `gender`, `age`, `workCategory`, `previousWork`, `phone`
-- `TopUpRequest`
-- `AdminSettings`
-- `TariffPlan`
-- `ListingTariff`
+- Отклики по заданиям (pipeline): `SENT/VIEWED/ACCEPTED/REJECTED/COMPLETED/CANCELED`
+- Кабинеты: `/dashboard`, `/dashboard-employer`
+- Избранное: `/favorites`
+- Сохраненные поиски: `/saved-searches`
+- In-app уведомления: `/notifications`
+- Жалобы + модерация в админке
+- Баланс и ручные пополнения с подтверждением админом
+- Тарифы `BASIC/PREMIUM/GOLD` с приоритетом в выдаче
+- SEO база: metadata, canonical, `sitemap.xml`, `robots.txt`
 
 ## Локальный запуск
-
-1. Установите зависимости:
-
+1. Установка зависимостей:
 ```bash
 npm install
 ```
 
-2. Скопируйте `.env.example` в `.env` и заполните значения.
+2. Создать `.env` из `.env.example`.
 
-3. Примените миграции:
-
+3. Применить миграции:
 ```bash
 npm run prisma:migrate
 ```
 
-4. Сгенерируйте Prisma Client:
-
+4. Сгенерировать Prisma Client:
 ```bash
 npm run prisma:generate
 ```
 
-5. Заполните базу тестовыми данными:
-
+5. Наполнить базу тестовыми данными:
 ```bash
 npm run prisma:seed
 ```
 
-6. Запустите проект:
-
+6. Запустить dev-сервер:
 ```bash
 npm run dev
 ```
 
-## ENV переменные
-
+## ENV
 ```env
 DATABASE_URL=
 DIRECT_URL=
+
 NEXTAUTH_URL=http://localhost:3112
 NEXTAUTH_SECRET=
+PUBLIC_BASE_URL=http://localhost:3112
 
 EMAIL_SERVER_HOST=
 EMAIL_SERVER_PORT=587
@@ -111,63 +76,57 @@ YANDEX_CLIENT_ID=
 YANDEX_CLIENT_SECRET=
 ```
 
-## API (основное)
+## Основные страницы
+- `/` — исполнители + поиск/фильтры
+- `/jobs` — задания + поиск/фильтры
+- `/listing/[id]` — карточка исполнителя, контакты, отзывы
+- `/jobs/[id]` — карточка задания, отклик, контакты
+- `/dashboard` — кабинет исполнителя + мои отклики
+- `/dashboard-employer` — кабинет работодателя + отклики
+- `/favorites` — избранные анкеты и задания
+- `/saved-searches` — сохраненные фильтры
+- `/notifications` — уведомления
+- `/admin` — пользователи, пополнения, тарифы, реквизиты, жалобы
+- `/how-it-works`, `/privacy`, `/terms`, `/support`
 
-### Публичные
-
-- `GET /api/listings?query=&category=&online=&urgent=&experienceMin=&experienceMax=&priceType=`
+## Ключевые API
+Публичные:
+- `GET /api/listings`
 - `GET /api/listings/[id]`
-- `GET /api/jobs?query=&category=&payType=&urgent=`
+- `GET /api/jobs`
 - `GET /api/jobs/[id]`
-- `GET /api/tariffs`
 
-### Пользовательские
+Пользовательские:
+- `POST /api/listings`, `PATCH /api/listings/[id]`
+- `POST /api/jobs`, `PATCH /api/jobs/[id]`
+- `POST /api/jobs/[id]/apply`
+- `GET /api/job-applications`, `PATCH /api/job-applications/[id]/status`
+- `POST /api/messages`
+- `GET/POST/DELETE /api/favorites`
+- `GET/POST /api/saved-searches`, `DELETE /api/saved-searches/[id]`
+- `GET /api/notifications`, `POST /api/notifications/read-all`
+- `POST /api/reports`
+- `GET/POST /api/topups`, `POST /api/topups/[id]/confirm`
+- `POST /api/support`
 
-- `POST /api/listings` (EXECUTOR)
-- `PATCH /api/listings/[id]` (owner/admin)
-- `POST /api/listings/[id]/promote`
-- `POST /api/jobs` (EMPLOYER)
-- `PATCH /api/jobs/[id]` (owner/admin)
-- `POST /api/jobs/[id]/promote`
-- `POST /api/jobs/[id]/complete`
-- `POST /api/profile`
-- `PATCH /api/profile/status`
-- `POST /api/messages` (требует авторизацию)
-- `POST /api/reviews` (EMPLOYER)
-- `POST /api/contacts/reveal`
-- `GET /api/topups`
-- `POST /api/topups`
-- `POST /api/topups/[id]/confirm`
+Админские:
+- `GET /api/admin/users`, `PATCH /api/admin/users/[id]/ban`
+- `GET /api/admin/topups`, `POST /api/admin/topups/[id]/approve`, `POST /api/admin/topups/[id]/reject`
+- `GET/PATCH /api/admin/settings`
+- `GET/POST /api/admin/tariffs`, `PATCH/DELETE /api/admin/tariffs/[id]`
+- `GET /api/admin/reports`, `PATCH /api/admin/reports/[id]/resolve`
 
-### Админские
-
-- `GET /api/admin/users`
-- `PATCH /api/admin/users/[id]/ban`
-- `GET /api/admin/topups`
-- `POST /api/admin/topups/[id]/approve`
-- `POST /api/admin/topups/[id]/reject`
-- `GET /api/admin/settings`
-- `PATCH /api/admin/settings`
-- `GET /api/admin/tariffs`
-- `POST /api/admin/tariffs`
-- `PATCH /api/admin/tariffs/[id]`
-- `DELETE /api/admin/tariffs/[id]`
-
-## Seed данные
-
+## Seed
 `prisma/seed.ts` создает:
-
-- 12 исполнителей с анкетами и карточками
-- 2 работодателя и задания (ACTIVE/PAUSED/COMPLETED)
-- 1 админа (`admin@derbent.local`)
-- 3 тарифа (`BASIC`, `PREMIUM`, `GOLD`)
+- демо-админа
+- исполнителей и работодателей
+- 10+ анкет и задания по Дербенту
+- тарифы `BASIC/PREMIUM/GOLD`
 - реквизиты для ручного пополнения
-- примеры заявок на пополнение с разными статусами
-- сообщения и отзывы
+- примеры откликов, избранного, сохраненных поисков, уведомлений и жалоб
 
-## TODO (следующий этап)
-
-- Подключение реальной оплаты (ЮKassa/CloudPayments)
-- История транзакций/баланса
-- Автоматические фоновые задачи (cron) вместо expire-on-read
-- Чаты с привязкой к пользователям и диалогам
+## TODO монетизации
+- Реальная оплата (ЮKassa/CloudPayments)
+- История транзакций баланса
+- Автопродление тарифов
+- Платные бусты: поднятие в топ, выделение цветом, пакетные размещения

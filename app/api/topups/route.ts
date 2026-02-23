@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TOP_UP_EXPIRES_MINUTES } from "@/lib/constants";
 import { expireEntities } from "@/lib/lifecycle";
 import { assertNotBanned } from "@/lib/access";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 import { topUpCreateSchema, topUpQuerySchema } from "@/lib/validations";
 
 function getTopUpExpiryDate() {
@@ -56,6 +57,26 @@ export async function POST(req: NextRequest) {
     await assertNotBanned(session.user.id);
   } catch {
     return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+  }
+
+  const rateLimit = await checkRateLimit({
+    action: "topup_create",
+    key: buildRateLimitKey(req, session.user.id),
+    limit: 6,
+    windowMs: 60 * 1000,
+    userId: session.user.id
+  });
+
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { error: "Слишком много заявок на пополнение. Попробуйте чуть позже." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds)
+        }
+      }
+    );
   }
 
   const body = await req.json();
